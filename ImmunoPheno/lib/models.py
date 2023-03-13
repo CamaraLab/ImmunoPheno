@@ -117,6 +117,9 @@ def _convert_gmm_np(mean: float,
         p_param (float): shape parameter used in a Negative Binomial Model
     """
     
+    if mean == 0:
+        mean += 1e-8
+
     # If stdev is less than mean, convert to Poisson distribution
     if (stdev ** 2) < mean:
         variance = mean + 0.00001
