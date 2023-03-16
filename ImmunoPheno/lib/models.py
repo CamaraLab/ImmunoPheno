@@ -1,5 +1,4 @@
-from plots import plot_fits
-
+import plots
 import warnings
 
 import numpy as np
@@ -95,10 +94,10 @@ def _gmm_results(counts: list,
                                  key=lambda item: item[1]['aic']))
 
     if plot:
-        plot_fits(counts=counts,
-                  fit_results=sorted_results,
-                  plot_percentile=plot_percentile,
-                  transformed=transformed)
+        plots.plot_fits(counts=counts,
+                        fit_results=sorted_results,
+                        plot_percentile=plot_percentile,
+                        transformed=transformed)
         
     return sorted_results
 
@@ -116,19 +115,18 @@ def _convert_gmm_np(mean: float,
         n_param (float): shape parameter used in a Negative Binomial Model
         p_param (float): shape parameter used in a Negative Binomial Model
     """
-    
     if mean == 0:
         mean += 1e-8
-
+    
     # If stdev is less than mean, convert to Poisson distribution
     if (stdev ** 2) < mean:
         variance = mean + 0.00001
     else:
         variance = stdev**2
     
-    p_param =  (variance - mean) / variance
     n_param = (mean**2) / (variance - mean)
-
+    p_param =  (variance - mean) / variance
+    
     return n_param, (1 - p_param)
 
 def _init_params_np(gmm_means: list, 
@@ -354,7 +352,6 @@ def _theta_constr_mle_3(args: list) -> float:
     
     Returns:
         A bounded total weight (theta1 - theta2) by 1 during optimization
-
     """
     return 1 - args[6] - args[7]
 
@@ -428,7 +425,6 @@ def _convert_ab_np(args: tuple,
     Returns:
         alpha, b parameters converted to n, p parameters, along with the 
         associated weights (thetas) for a model
-
     """
     if num_components == 1:
         alpha1, b1 = args
@@ -560,9 +556,9 @@ def _nb_mle_results(counts: list,
     sorted_results = dict(sorted(results.items(), 
                                  key=lambda item: item[1]['aic']))
     if plot:
-        plot_fits(counts=counts,
-                  fit_results=sorted_results,
-                  plot_percentile=plot_percentile,
-                  transformed=transformed)
+        plots.plot_fits(counts=counts,
+                        fit_results=sorted_results,
+                        plot_percentile=plot_percentile,
+                        transformed=transformed)
 
     return sorted_results
