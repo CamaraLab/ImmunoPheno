@@ -1334,19 +1334,3 @@ class ImmunoPhenoData:
         self._normalized_counts_df = normalized_df
 
         return normalized_df
-
-if __name__ == "__main__":
-    # cite_protein = pd.read_csv("https://www.dropbox.com/s/xzobh2p13cqt4y5/protein_expr_all.csv?dl=1", header=0, sep=",", index_col=[0])
-    # cite_rna = pd.read_csv("https://www.dropbox.com/s/910hhahxsbd9ofs/gene_matrix_all_new.csv?dl=1", header=0, sep=",", index_col=[0])
-    # cite_labels = pd.read_csv("https://www.dropbox.com/s/42i365fpodrd6lu/cluster_labels.csv?dl=1", header=None, sep=",")
-    
-    cite_protein = pd.read_csv(r"C:\Users\lincwu\Desktop\ImmunoTest\ADT_count_titration.csv", header=0, sep=",", index_col=[0])
-    print(cite_protein)
-    cite_rna = pd.read_csv(r"C:\Users\lincwu\Desktop\ImmunoTest\RNA_count_titration.csv", header=0, sep=",", index_col=[0])
-    print(cite_rna)
-
-    cite_Obj = ImmunoPhenoData(cite_protein, cite_rna)
-    testFits= cite_Obj.fit_all_antibodies(model='nb')
-    print(testFits)
-    norm_df = cite_Obj.normalize_all_antibodies()
-    print(norm_df)
