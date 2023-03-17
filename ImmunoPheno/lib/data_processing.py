@@ -575,7 +575,7 @@ def _z_avg_umi_sum_by_type(bg_z_score_df: pd.DataFrame,
         bg_z_score_df (pd.DataFrame): DataFrame containing only z scores for
             background cells
         rna_counts_df (pd.DataFrame): UMI counts for each cell (RNA data)
-        labels_filt_df (pd.DataFrame):
+        labels_filt_df (pd.DataFrame): cells and their cell type
     Returns:
         df_by_type_dict (dict): dictionary containing keys as cell type and 
             values as a dataframe consisting of z score averages and total UMIs 
