@@ -1,16 +1,9 @@
 import models
 import numpy as np
-
 import scipy.stats as ss
-import scipy.optimize as so
-import scipy.special as sp
-
 from sklearn.linear_model import LinearRegression
-
 import statsmodels.api as sm
-
 import pandas as pd
-
 import statistics
 
 
@@ -97,24 +90,6 @@ def _arcsinh_transform(d_vect: list,
     """
     data_array = np.array([scale*i - (scale*min(d_vect)) for i in d_vect])
     return np.arcsinh(data_array.astype(float))
-
-def _conv_np_mean_stdev(n: float,
-                        p: float) -> tuple:
-    """
-    Converts Negative Binomial n, p parameters into mean and standard deviation
-
-    Parameters:
-        n (float): shape parameter used in Negative Binomial
-        p (float): shape parameter used in Negative Binomial
-    
-    Returns:
-        mean (float): mean value of mixture model
-        stdev (float): standard deviation of mixture model
-    """
-    mean = (n) * ((1 - p)/(p))
-    stdev = (n) * ((1 - p)/(p**2))
-
-    return mean, stdev
 
 def _conv_np_mode(n: float,
                   p: float) -> float:
@@ -373,7 +348,8 @@ def _classify_cells_df(fit_all_results: list,
     return classified_df
 
 def _filter_classified_df(classified_df: pd.DataFrame,
-                          threshold: float = 0.85) -> pd.DataFrame:
+                          sig_threshold: float = 0.85,
+                          bg_threshold: float = 0.15) -> pd.DataFrame:
     """
     Filters out cells that have a total signal expression ratio greater 
     than a defined threshold
@@ -381,8 +357,10 @@ def _filter_classified_df(classified_df: pd.DataFrame,
     Parameters:
         classified_df (pd.DataFrame): DataFrame containing all cells and their
             classification as background or signal for a set of antibodies
-        threshold (float): the ratio of the number of antibody signals to 
-            the total number of antibodies
+        sig_expr_threshold (float): threshold for antibody expression when
+                filtering cells that have a high signal expression rate
+        bg_expr_threshold (float): threshold for antibody expression when
+            filtering cells that have a low signal expression rate
 
     Returns:
         filtered_df (pd.DataFrame): DataFrame containing cells that fall below
@@ -394,11 +372,11 @@ def _filter_classified_df(classified_df: pd.DataFrame,
 
     # Filter out cells that have a majority expresssing signal
     filtered_df = classified_df[(((classified_df == 1).sum(axis=1) 
-                                  / len(classified_df.columns))) <= threshold]
+                                  / len(classified_df.columns))) <= sig_threshold]
     
     # Filter out cells that have a majority expressing background
     filtered_df = filtered_df[(((filtered_df == 1).sum(axis=1)
-                                / len(filtered_df.columns)) >= 0.15)]
+                                / len(filtered_df.columns)) >= bg_threshold)]
 
     return filtered_df
 
@@ -1233,17 +1211,20 @@ class ImmunoPhenoData:
 
     def normalize_all_antibodies(self,
                                  p_threshold: float = 0.05,
-                                 expr_threshold: float = 0.85,
-                                 background_cell_z_score: int = -10):
+                                 sig_expr_threshold: float = 0.85,
+                                 bg_expr_threshold: float = 0.15,
+                                 bg_cell_z_score: int = -10):
         """
         Normalizes all values in a protein matrix
 
         Parameters:
             p_threshold (float): threshold for p-value rejection when
                 performing linear regression to account for cell size and type
-            expr_threshold (float): threshold for antibody expression when
+            sig_expr_threshold (float): threshold for antibody expression when
                 filtering cells that have a high signal expression rate
-            background_cell_z_score (int): z-score value for background cells
+            bg_expr_threshold (float): threshold for antibody expression when
+                filtering cells that have a low signal expression rate
+            bg_cell_z_score (int): z-score value for background cells
                 when computing a z-score table for all normalized counts
         
         Returns:
@@ -1266,7 +1247,8 @@ class ImmunoPhenoData:
 
         # Filter out cells that have a high signal:background ratio (default: 0.85)
         classified_cells_filt = _filter_classified_df(classified_cells, 
-                                                    threshold=expr_threshold)
+                                                    sig_threshold=sig_expr_threshold,
+                                                    bg_threshold=bg_expr_threshold)
         self._classified_filt_df = classified_cells_filt
 
         # # Filter the same cells from the protein data
@@ -1301,7 +1283,7 @@ class ImmunoPhenoData:
                                     protein_cleaned_filt_df=protein_cleaned_filt, 
                                     fit_all_results=all_fits,
                                     p_threshold=p_threshold,
-                                    background_cell_z_score=background_cell_z_score,
+                                    background_cell_z_score=bg_cell_z_score,
                                     classified_filt_df=classified_cells_filt, 
                                     cell_labels_filt_df=cell_labels_filt, 
                                     lin_reg_dict=lin_reg_type)
@@ -1317,7 +1299,7 @@ class ImmunoPhenoData:
                                     protein_cleaned_filt_df=protein_cleaned_filt, 
                                     fit_all_results=all_fits,
                                     p_threshold=p_threshold,
-                                    background_cell_z_score=background_cell_z_score,
+                                    background_cell_z_score=bg_cell_z_score,
                                     classified_filt_df=classified_cells_filt,
                                     lin_reg=lin_reg)
 
@@ -1328,7 +1310,7 @@ class ImmunoPhenoData:
                                     protein_cleaned_filt_df=protein_cleaned_filt, 
                                     fit_all_results=all_fits,
                                     p_threshold=p_threshold,
-                                    background_cell_z_score=background_cell_z_score,
+                                    background_cell_z_score=bg_cell_z_score,
                                     classified_filt_df=classified_cells_filt)
         
         self._normalized_counts_df = normalized_df
