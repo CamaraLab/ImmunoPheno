@@ -5,6 +5,8 @@ from sklearn.linear_model import LinearRegression
 import statsmodels.api as sm
 import pandas as pd
 import statistics
+import warnings
+import logging
 
 
 def clean_adt(protein_df: pd.DataFrame) -> pd.DataFrame:
@@ -366,17 +368,26 @@ def _filter_classified_df(classified_df: pd.DataFrame,
         filtered_df (pd.DataFrame): DataFrame containing cells that fall below
             the defined threshold for signal expression
     """
+    num_ab = len(classified_df.columns)
+    num_original_cells = len(classified_df.index)
 
-    # Calculate number of antibody-specific signals for a cell
-    num_sig = (classified_df == 1).sum(axis=1) / len(classified_df.columns)
+    # We want to first filter out cells that have 0 expression automatically
+    none_filt = classified_df[(classified_df == 1).sum(axis=1) > 0]
 
-    # Filter out cells that have a majority expresssing signal
-    filtered_df = classified_df[(((classified_df == 1).sum(axis=1) 
-                                  / len(classified_df.columns))) <= sig_threshold]
+    # We also want to filter out cells that have 100 expression automatically
+    all_filt = none_filt[(classified_df == 1).sum(axis=1) < num_ab]
+
+    num_filt = num_original_cells - len(all_filt.index)
+    logging.warning(f" {num_filt} cells with 0% or 100% expression been " 
+                    "automatically filtered out.")
+
+    # Filter out cells that have a majority expresssing signal (user-defined)
+    filtered_df = all_filt[(((all_filt == 1).sum(axis=1) 
+                            / num_ab)) <= sig_threshold]
     
-    # Filter out cells that have a majority expressing background
+    # Filter out cells that have a majority expressing background (user-defined)
     filtered_df = filtered_df[(((filtered_df == 1).sum(axis=1)
-                                / len(filtered_df.columns)) >= bg_threshold)]
+                                / num_ab) >= bg_threshold)]
 
     return filtered_df
 
@@ -1241,7 +1252,8 @@ class ImmunoPhenoData:
             raise Exception("All antibodies must be fit before normalizing. "
                             "call fit_all_antibodies() or fit_antibody() for "
                             "each antibody.") 
-            
+        
+        warnings.filterwarnings('ignore')
         # Classify all cells as either background or signal
         classified_cells = _classify_cells_df(all_fits, self._protein_matrix)
 
