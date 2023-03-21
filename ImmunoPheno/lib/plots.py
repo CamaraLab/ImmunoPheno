@@ -307,6 +307,7 @@ def plot_UMAP(IPD,
             raw_types = IPD.norm_cell_labels.iloc[:, 0].tolist()
             norm_plot = px.scatter(
                 projections, x=0, y=1,
+                color_discrete_sequence=px.colors.qualitative.Dark24,
                 color=[str(cell_type) for cell_type in raw_types],
                 labels={'color':'cell type'}
             )
@@ -316,6 +317,7 @@ def plot_UMAP(IPD,
             raw_types = IPD.raw_cell_labels.iloc[:, 0].tolist()
             reg_plot = px.scatter(
                 projections, x=0, y=1,
+                color_discrete_sequence=px.colors.qualitative.Dark24,
                 color=[str(cell_type) for cell_type in raw_types],
                 labels={'color':'cell type'}
             )
