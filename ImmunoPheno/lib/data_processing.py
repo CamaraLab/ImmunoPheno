@@ -1012,7 +1012,7 @@ class ImmunoPhenoData:
 
         Returns:
             fit_all_results (list): list of dictionaries, with each dictionary 
-            containing results from optimization for an antibody
+            containing optimization results for an antibody
         """
 
         if model != 'gaussian' and model != 'nb':
@@ -1073,6 +1073,8 @@ class ImmunoPhenoData:
             data_vector (list): raw ADT values from protein data 
             ab_name (str): name of antibody
             p_threshold (float): threshold for p value rejection
+            background_cell_z_score (int): z-score value for background cells
+                when computing a z-score table for all normalized counts
             classified_filt_df (pd.DataFrame): contains classification for 
                 all cells except those filtered by expression level
             cell_labels_filt_df (pd.DataFrame): contains cell
@@ -1190,9 +1192,19 @@ class ImmunoPhenoData:
             fit_all_results (list): list of dictionaries containing 
                 optimization results for each antibody
             p_threshold (float): threshold for p value rejection
-            classified_filt_df (pd.DataFrame): containing all 
-            cell_labels_filt_df (pd.DataFrame):
-            lin_reg_dict (dict):
+            background_cell_z_score (int): z-score value for background cells
+                when computing a z-score table for all normalized counts
+            classified_filt_df (pd.DataFrame): contains classification for 
+                all cells except those filtered by expression level
+            cell_labels_filt_df (pd.DataFrame): contains cell
+                labels for all cells except those filtered by expression level
+            lin_reg_dict (dict): results of linear regression separated by
+                cell type 
+            lin_reg (pd.DataFrame): results of linear regression without
+                separating by cell type
+
+        Returns:
+            normalized_df_transpose (pd.DataFrame): 
         """
 
         normalized_list = []
