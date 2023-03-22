@@ -292,7 +292,7 @@ def plot_UMAP(IPD,
         try:
             projections = umap_plot.fit_transform(IPD.normalized_counts)
         except:
-            raise NameError("Cannot plot normalized UMAP. "
+            raise data_processing.PlotUMAPError("Cannot plot normalized UMAP. "
                             "normalize_all_antibodies() must be called first.")
     else:
         projections = umap_plot.fit_transform(IPD.protein_cleaned)

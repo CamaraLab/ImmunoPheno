@@ -9,7 +9,7 @@ import warnings
 import logging
 
 
-def clean_adt(protein_df: pd.DataFrame) -> pd.DataFrame:
+def _clean_adt(protein_df: pd.DataFrame) -> pd.DataFrame:
     """
     Transposes the protein DataFrame
 
@@ -25,7 +25,7 @@ def clean_adt(protein_df: pd.DataFrame) -> pd.DataFrame:
     
     return protein_df_copy
 
-def clean_rna(gene_df: pd.DataFrame) -> pd.DataFrame:
+def _clean_rna(gene_df: pd.DataFrame) -> pd.DataFrame:
     """
     Transposes the RNA DataFrame of UMIs containing features (genes) and cells
 
@@ -41,7 +41,7 @@ def clean_rna(gene_df: pd.DataFrame) -> pd.DataFrame:
 
     return gene_df_copy_transposed
 
-def clean_labels(cell_label_df: pd.DataFrame) -> pd.DataFrame:
+def _clean_labels(cell_label_df: pd.DataFrame) -> pd.DataFrame:
     """
     Shifts the first column (cell names) to become the index.
     Remaining column will contain the cell types.
@@ -378,7 +378,7 @@ def _filter_classified_df(classified_df: pd.DataFrame,
     all_filt = none_filt[(classified_df == 1).sum(axis=1) < num_ab]
 
     num_filt = num_original_cells - len(all_filt.index)
-    logging.warning(f" {num_filt} cells with 0% or 100% expression been " 
+    logging.warning(f" {num_filt} cells with 0% or 100% expression have been " 
                     "automatically filtered out.")
 
     # Filter out cells that have a majority expresssing signal (user-defined)
@@ -794,6 +794,48 @@ def _correlation_ab(classified_df: pd.DataFrame,
                                   columns=ab_names)
     return correlation_df
 
+class ImmunoPhenoError(Exception):
+    """A base class for ImmunoPheno Exceptions."""
+
+class PlotUMAPError(ImmunoPhenoError):
+    """No normalized counts are found when plotting a normalized UMAP"""
+
+class LoadMatrixError(ImmunoPhenoError):
+    """Protein or transcriptome matrix is empty"""
+
+class AntibodyLookupError(ImmunoPhenoError):
+    """Antibody in protein matrix is not found"""
+
+class TransformTypeError(ImmunoPhenoError):
+    """Transformation type is neither 'log' or 'arcsinh'"""
+
+class TransformScaleError(ImmunoPhenoError):
+    """Transformation scale is not an int"""
+
+class PlotAntibodyFitError(ImmunoPhenoError):
+    """Option to view antibody fits is not a boolean"""
+
+class PlotPercentileError(ImmunoPhenoError):
+    """Percentile value for plotting is not an int or float"""
+
+class ExtraArgumentsError(ImmunoPhenoError):
+    """Providing gaussian kwargs when using negative binomial model"""
+
+class InvalidModelError(ImmunoPhenoError):
+    """Model is neither 'nb' or 'gaussian'"""
+
+class EmptyAntibodyFitsError(ImmunoPhenoError):
+    """No antibody fits present when normalizing data"""
+
+class IncompleteAntibodyFitsError(ImmunoPhenoError):
+    """Not all antibodies have been fit when normalizing data"""
+
+class BoundsThresholdError(ImmunoPhenoError):
+    """Provided threshold value lies outside of 0 <= x <= 1"""
+
+class BackgroundZScoreError(ImmunoPhenoError):
+    """Provided default z score value is greater than 0"""
+
 class ImmunoPhenoData:
     """
     A class to hold single-cell data (CITE-Seq, etc) and Flow Cytometry data.
@@ -828,18 +870,18 @@ class ImmunoPhenoData:
         self._z_scores_df = None
 
         if protein_matrix is None:
-            raise TypeError("protein_matrix must be provided")
+            raise LoadMatrixError("protein_matrix must be provided")
 
         if (protein_matrix is not None and 
             cell_labels is not None and 
             gene_matrix is None):
-            raise TypeError("gene_matrix must be present along with "
-                            "cell_labels")
+            raise LoadMatrixError("gene_matrix must be present along with "
+                                  "cell_labels")
         
         # Single cell
         if self._protein_matrix is not None and self._gene_matrix is not None:
-            self._protein_matrix = clean_adt(self._protein_matrix)
-            self._gene_matrix = clean_rna(self._gene_matrix)
+            self._protein_matrix = _clean_adt(self._protein_matrix)
+            self._gene_matrix = _clean_rna(self._gene_matrix)
         # Flow
         elif self._protein_matrix is not None and self._gene_matrix is None:
             self._protein_matrix = self._protein_matrix
@@ -847,7 +889,7 @@ class ImmunoPhenoData:
 
         # If dealing with single cell data
         if self._cell_labels is not None:
-            self._cell_labels = clean_labels(self._cell_labels)
+            self._cell_labels = _clean_labels(self._cell_labels)
         else:
             cell_labels = None
     
@@ -900,6 +942,29 @@ class ImmunoPhenoData:
         Returns:
             gauss_params/nb_params (dict): results from optimization
         """
+
+        # Checking parameters
+        if model != 'nb' and model != 'gaussian':
+            raise InvalidModelError(("Invalid model. Please choose 'gaussian' or 'nb'. "
+                                    "Default: 'gaussian'."))
+            
+        if model == 'nb' and len(kwargs) > 0:
+            raise ExtraArgumentsError("additional kwargs can only be used for 'gaussian'.")
+
+        if transform_scale != 1 and transform_type is None:
+            raise TransformTypeError("transform_type must be chosen to use "
+                                  "transform_scale. choose 'log' or 'arcsinh'.")
+            
+        if isinstance(transform_scale, int) == False:
+            raise TransformScaleError("'transform_scale' must be an integer value.")
+
+        if isinstance(plot, bool) == False:
+            raise PlotAntibodyFitError("'plot' must be a boolean value.")
+        
+        if (isinstance(plot_percentile, float) == False and 
+            isinstance(plot_percentile, int) == False):
+            raise PlotPercentileError("'plot_percentile' must be an int or float value.")
+
         # Check if all_fits_dict exists
         if self._all_fits_dict is None:
             self._all_fits_dict = {}
@@ -916,26 +981,13 @@ class ImmunoPhenoData:
                 data_vector = list(self._protein_matrix.loc[:, input].values)
                 individual = True   
             except:
-                raise ValueError(f"'{input}' not found in protein data.")   
+                raise AntibodyLookupError(f"'{input}' not found in protein data.")   
         # Fitting all antibodies at once
         else:
             data_vector = input
 
-        if transform_scale != 1 and transform_type is None:
-            raise ValueError("transform_type must be chosen to use "
-                             "transform_scale. choose 'log' or 'arcsinh'.")
-        if isinstance(transform_scale, int) == False:
-            raise TypeError("'transform_scale' must be an integer value.")
-
-        if isinstance(plot, bool) == False:
-            raise TypeError("'plot' must be a boolean value.")
-        
-        if isinstance(plot_percentile, 
-                      float) == False and isinstance(plot_percentile,
-                                                     int) == False:
-            raise TypeError("'plot_percentile' must be an int or float value.")
-
         transformed = False
+
         if transform_type is not None:     
             if transform_type == 'log':
                 data_vector = _log_transform(d_vect=data_vector,
@@ -947,49 +999,39 @@ class ImmunoPhenoData:
                                                 scale=transform_scale)
                 transformed = True
             else:
-                raise Exception(("Invalid transformation type. " 
-                                "Please choose 'log' or 'arcsinh'. "
-                                "Default: None."))
+                raise TransformTypeError(("Invalid transformation type. " 
+                                          "Please choose 'log' or 'arcsinh'. "
+                                          "Default: None."))
             
-        try:
-            if model == 'gaussian':
-                gauss_params = models._gmm_results(counts=data_vector, 
-                                                   transformed=transformed, 
-                                                   plot=plot, 
-                                                   plot_percentile=plot_percentile,
-                                                   **kwargs)
+        if model == 'gaussian':
+            gauss_params = models._gmm_results(counts=data_vector, 
+                                               transformed=transformed, 
+                                               plot=plot, 
+                                               plot_percentile=plot_percentile,
+                                               **kwargs)
 
-                # Check if a params already exists in dict
-                if individual:
-                    # Add or replace the existing fit so far
-                    self._all_fits_dict[input] = gauss_params
+            # Check if a params already exists in dict
+            if individual:
+                # Add or replace the existing fit so far
+                self._all_fits_dict[input] = gauss_params
 
-                    # Update all of the fits to self._all_fits
-                    # while filtering out None (for antibodies without fits yet)
-                    self._all_fits = list(filter(None, self._all_fits_dict.values()))
+                # Update all of the fits to self._all_fits
+                # while filtering out None (for antibodies without fits yet)
+                self._all_fits = list(filter(None, self._all_fits_dict.values()))
 
-                return gauss_params
+            return gauss_params
 
-            elif model == 'nb':
-                nb_params = models._nb_mle_results(counts=data_vector,
-                                                   transformed=transformed,
-                                                   plot=plot,
-                                                   plot_percentile=plot_percentile)
- 
-                # Check if a params already exists in dict
-                if individual:
-                    # Add or replace the existing fit so far
-                    self._all_fits_dict[input] = nb_params
+        elif model == 'nb':
+            nb_params = models._nb_mle_results(counts=data_vector,
+                                               transformed=transformed,
+                                               plot=plot,
+                                               plot_percentile=plot_percentile)
 
-                    # Update all of the fits to self._all_fits
-                    # while filtering out None (for antibodies without fits yet)
-                    self._all_fits = list(filter(None, self._all_fits_dict.values()))
-                
-                return nb_params
-
-        except ValueError:
-                (("Invalid model. Please choose 'gaussian' or 'nb'. "
-                              "Default: 'gaussian'."))
+            if individual:
+                self._all_fits_dict[input] = nb_params
+                self._all_fits = list(filter(None, self._all_fits_dict.values()))
+            
+            return nb_params
     
     def fit_all_antibodies(self,
                            transform_type: str = None,
@@ -1015,25 +1057,6 @@ class ImmunoPhenoData:
             containing optimization results for an antibody
         """
 
-        if model != 'gaussian' and model != 'nb':
-            raise ValueError("Invalid model. Please choose 'gaussian' or 'nb'. "
-                             "Default: 'gaussian'.")
-            
-        if model == 'nb' and len(kwargs) > 0:
-            raise ValueError("additional kwargs can only be used for 'gaussian'.")      
-
-        if isinstance(transform_scale, int) == False:
-            raise TypeError("'transform_scale' must be an integer value.")
-
-        if isinstance(plot, bool) == False:
-            raise TypeError("'plot' must be a boolean value.")
-        
-        if isinstance(plot_percentile, 
-                      float) == False and isinstance(plot_percentile,
-                                                     int) == False:
-            raise TypeError("'plot_percentile' must be an int or float value.")
-        
-        
         fit_all_results = []
 
         for ab in self._protein_matrix:
@@ -1255,16 +1278,24 @@ class ImmunoPhenoData:
                 protein values
         """
         if self._all_fits is None:
-            raise Exception("No fits found for each antibody. Please"
-                            " call fit_all_antibodies() or fit_antibody() first.")
+            raise EmptyAntibodyFitsError("No fits found for each antibody. Please "
+                                         "call fit_all_antibodies() or fit_antibody() first.")
         else:
             all_fits = self._all_fits
         
         if None in self._all_fits_dict.values():
-            raise Exception("All antibodies must be fit before normalizing. "
-                            "call fit_all_antibodies() or fit_antibody() for "
-                            "each antibody.") 
+            raise IncompleteAntibodyFitsError("All antibodies must be fit before normalizing. "
+                                              "call fit_all_antibodies() or fit_antibody() for "
+                                              "each antibody.") 
         
+        if (not 0 <= p_threshold <= 1 or
+            not 0 <= sig_expr_threshold <= 1 or
+            not 0 <= bg_expr_threshold <= 1):
+            raise BoundsThresholdError("threshold must lie between 0 and 1 (inclusive)")
+        
+        if not bg_cell_z_score < 0:
+            raise BackgroundZScoreError("bg_cell_z_score must be less than 0")
+
         warnings.filterwarnings('ignore')
         # Classify all cells as either background or signal
         classified_cells = _classify_cells_df(all_fits, self._protein_matrix)
