@@ -46,7 +46,7 @@ def example_fit_results():
 def test_plot_fits(mocker, example_fit_results):
     # Arrange
     counts = [1, 2, 3, 4, 5]
-    mock_plots = mocker.patch("src.immunotest.models.plt.show")
+    mock_plots = mocker.patch("src.immunopheno.models.plt.show")
     
     # Act
     plot_fits(counts, example_fit_results)
@@ -57,7 +57,7 @@ def test_plot_fits(mocker, example_fit_results):
 def test_plot_all_fits(mocker, example_fit_results):
     # Arrange
     counts_df = pd.DataFrame({'ab1': [153, 235, 4, 2]})
-    mock_all_plots = mocker.patch("src.immunotest.models.plot_fits")
+    mock_all_plots = mocker.patch("src.immunopheno.models.plot_fits")
 
     # Act
     plot_all_fits(counts_df, [example_fit_results])
@@ -75,7 +75,6 @@ def test_gmm_init_params():
                 [0.37942110729528333, 0.6205788927047167],
                 -8.331697795394035,
                 26.66339559078807)
-    
     # Act
     output = _gmm_init_params(counts, n, seed)
 
@@ -127,6 +126,7 @@ def test_init_params_np():
              (1e-08, np.inf), (1e-08, np.inf), 
              (1e-08, np.inf), (1e-08, np.inf), 
              (1e-08, 1), (1e-08, 1)])
+
     ]
 )
 def test_param_bounds(num_comp, expected):
@@ -179,28 +179,22 @@ def test_theta_constr_mle_3():
 @pytest.mark.parametrize(
     "args, data_vector, param_bounds, num_comp, expected",
     [
-        ((1, 0.2), [1,2,3], 
-            [(1e-08, np.inf), (1e-08, np.inf)], 
-            1, 
-            [14.85, 0.13]),
-        ((1, 0.2, 2, 0.5, 0.4), [1, 2, 3], 
-            [(1e-08, np.inf), (1e-08, np.inf), (1e-08, np.inf), (1e-08, np.inf), (1e-08, 1)], 
-            2, 
-            [3.21, 0.55, 15.00, 0.13, 1e-08]),
+        ((1, 0.2), [1,2,3], [(1e-08, np.inf), (1e-08, np.inf)], 1, [14.85, 0.13]),
+        ((1, 0.2, 2, 0.5, 0.4), [1, 2, 3], [(1e-08, np.inf), (1e-08, np.inf), (1e-08, np.inf), (1e-08, np.inf), (1e-08, 1)], 2, [3.21, 0.55, 15.00, 0.13, 1e-08]),
         ((4, 0.2, 6, 0.5, 7, 0.2, 0.3, 0.6), [1, 2, 3], 
             [(1e-08, np.inf), (1e-08, np.inf), 
              (1e-08, np.inf), (1e-08, np.inf), 
              (1e-08, np.inf), (1e-08, np.inf), 
-             (1e-08, 1), (1e-08, 1)], 
-             3, 
+             (1e-08, 1), (1e-08, 1)], 3, 
              [3.88, 0.64, 6.01, 0.32, 7.00, 0.29, 1e-08, 0.52])
     ]
 )
 def test_mle_mix_nb(mocker, args, data_vector, param_bounds, num_comp, expected):
     # Arrange
-    mock_constr_2 = mocker.patch("src.immunotest.models._theta_constr_mle_2",
+    mock_constr_2 = mocker.patch("src.immunopheno.models._theta_constr_mle_2",
                                  return_value=0.6)
-    mock_constr_3 = mocker.patch("src.immunotest.models._theta_constr_mle_3",
+    
+    mock_constr_3 = mocker.patch("src.immunopheno.models._theta_constr_mle_3",
                                  return_value=0.1)
 
     # Act
@@ -212,12 +206,9 @@ def test_mle_mix_nb(mocker, args, data_vector, param_bounds, num_comp, expected)
 @pytest.mark.parametrize(
     "args, num_comp, expected",
     [
-       ((14.85, 0.13), 
-            1, (14.85, 0.88)),
-       ((3.21, 0.55, 15.00, 0.13, 1e-08), 
-            2, (3.21, 0.64, 15.0, 0.88, 1e-08)),
-       ((3.88, 0.64, 6.01, 0.32, 7.00, 0.29, 1e-08, 0.52), 
-            3, (3.88, 0.60, 6.01, 0.75, 7.0, 0.77, 1e-08, 0.52))
+       ((14.85, 0.13), 1, (14.85, 0.88)),
+       ((3.21, 0.55, 15.00, 0.13, 1e-08), 2, (3.21, 0.64, 15.0, 0.88, 1e-08)),
+       ((3.88, 0.64, 6.01, 0.32, 7.00, 0.29, 1e-08, 0.52), 3, (3.88, 0.60, 6.01, 0.75, 7.0, 0.77, 1e-08, 0.52))
     ]
 )
 def test_convert_ab_np(args, num_comp, expected):
