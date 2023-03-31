@@ -211,7 +211,6 @@ def _classify_cells(fit_results: dict,
             comp3_probs = ss.nbinom.pmf(range(max(data_vector) + 1), 
                                         n_params[comp3_index], 
                                         p_params[comp3_index])
-
         elif best_num_mix == 2:
             comp2_index = component_list.pop(0)
             comp2_probs = ss.nbinom.pmf(range(max(data_vector) + 1), 
@@ -231,7 +230,6 @@ def _classify_cells(fit_results: dict,
                     classified_cells.append(0)
                 else:
                     classified_cells.append(1)
-
             elif best_num_mix == 2:
                 comp1_cell_prob = comp1_probs[cell]
                 comp2_cell_prob = comp2_probs[cell] + (0.5 - epsilon)
@@ -266,7 +264,6 @@ def _classify_cells(fit_results: dict,
             comp3_index = component_list.pop(0)
             comp3_mean = gmm_means[comp3_index]
             comp3_stdev = gmm_stdevs[comp3_index]
-           
         elif best_num_mix == 2:
             comp2_index = component_list.pop(0)
             comp2_mean = gmm_means[comp2_index]
@@ -291,7 +288,6 @@ def _classify_cells(fit_results: dict,
                     classified_cells.append(0)
                 else:
                     classified_cells.append(1)
-
             elif best_num_mix == 2:
                 comp1_cell_prob = ss.norm.pdf(cell,
                                               bg_mean,
@@ -438,7 +434,7 @@ def _z_scores(fit_results: dict,
 
     Returns:
         z_scores (list): all count values (both background and signal) converted
-            into z scorees
+            into z scores
     """
     z_scores = []
 
@@ -550,8 +546,9 @@ def _z_avg_umi_sum(bg_z_score_df: pd.DataFrame,
     z_umi_df = pd.DataFrame(columns=['z_score_avg', 'total_umi'])
     z_umi_df['z_score_avg'] = bg_z_score_df.mean(axis=1)
     z_umi_df['total_umi'] = rna_counts_df.loc[z_umi_df.index].sum(axis=1)
+    z_umi_clean = z_umi_df.dropna()
 
-    return z_umi_df
+    return z_umi_clean
 
 def _z_avg_umi_sum_by_type(bg_z_score_df: pd.DataFrame,
                            rna_counts_df: pd.DataFrame,
@@ -581,12 +578,14 @@ def _z_avg_umi_sum_by_type(bg_z_score_df: pd.DataFrame,
     # Add the list of types into the z_umi_df
     z_umi_df['type'] = list(labels_filt_df.iloc[:, 0])
     
+    z_umi_clean = z_umi_df.dropna()
+
     # Find all cell types 
     unique_cell_types = list(set(labels_filt_df.iloc[:, 0]))
 
     # Separate all cells out by cell type
     for cell_type in unique_cell_types:
-        temp_df = pd.DataFrame(z_umi_df.loc[z_umi_df['type'] == cell_type])
+        temp_df = pd.DataFrame(z_umi_clean.loc[z_umi_clean['type'] == cell_type])
         df_by_type.append(temp_df)
         df_by_type_dict[cell_type] = temp_df
 
@@ -660,8 +659,12 @@ def _linear_reg_by_type(df_by_type_dict: dict) -> dict:
     lin_reg_by_type_dict = {}
 
     for cell_type, df in df_by_type_dict.items():
-        temp_lin_reg = _linear_reg(df)
-        lin_reg_by_type_dict[cell_type] = temp_lin_reg
+        # If a cell type's df is empty, ignore it (no cells for that type)
+        if len(df.index) == 0:
+            continue
+        else:
+            temp_lin_reg = _linear_reg(df)
+            lin_reg_by_type_dict[cell_type] = temp_lin_reg
     
     return lin_reg_by_type_dict
 
@@ -733,7 +736,7 @@ def _correlation_ab(classified_df: pd.DataFrame,
             classification as background or signal for a set of antibodies
             Format: rows: cells, col: antibodies
         z_scores_df (pd.DataFrame): DataFrame of z-scores of protein counts
-            Format:rows: cells, col: antibodies
+            Format: rows: cells, col: antibodies
 
     Returns:
         correlation_df (pd.DataFrame): DataFrame containing pearson's correlation
@@ -793,6 +796,183 @@ def _correlation_ab(classified_df: pd.DataFrame,
                                   index=ab_names, 
                                   columns=ab_names)
     return correlation_df
+
+def _normalize_antibody(fit_results: dict, 
+                        data_vector: pd.Series, 
+                        ab_name: str, 
+                        p_threshold: float = 0.05,
+                        background_cell_z_score = -10, 
+                        classified_filt_df: pd.DataFrame = None,
+                        cell_labels_filt_df: pd.DataFrame = None, 
+                        lin_reg_dict: dict = None,
+                        lin_reg: pd.DataFrame = None) -> list:
+        """
+        Normalizes single cell or flow cytometry values for an antibody
+
+        Parameters:
+            fit_results (dict): optimization results for an antibody, containing
+                three mixture models and their respective parameter results
+            data_vector (pd.Series): raw ADT values from protein data 
+            ab_name (str): name of antibody
+            p_threshold (float): threshold for p value rejection
+            background_cell_z_score (int): z-score value for background cells
+                when computing a z-score table for all normalized counts
+            classified_filt_df (pd.DataFrame): contains classification for 
+                all cells except those filtered by expression level
+            cell_labels_filt_df (pd.DataFrame): contains cell
+                labels for all cells except those filtered by expression level
+            lin_reg_dict (dict): results of linear regression separated by
+                cell type 
+            lin_reg (pd.DataFrame): results of linear regression without
+                separating by cell type
+
+        Returns:
+            normalized_z_scores (list): normalized z scores for an antibody
+        """
+        normalized_counts = []
+        normalized_z_scores = []
+
+        # Get background mean and standard deviation of either GMM or NB model
+        background_mean, background_std = _bg_mean_std(fit_results)
+
+        # Get the classified cell vector for this antibody
+        classified_cells = classified_filt_df[ab_name].values
+
+        # Raw data vector
+        for i, (cell_name, cell_count) in enumerate(data_vector.items()):
+            if classified_cells[i] == 0:
+                normalized_counts.append(0)
+
+            elif classified_cells[i] == 1:
+
+                # If dealing with flow cytometry data
+                if (cell_labels_filt_df is None 
+                    and lin_reg_dict is None 
+                    and lin_reg is None):
+                    # Apply normalization formula
+                    normalized_val = cell_count - background_mean
+                    normalized_counts.append(normalized_val)
+                
+                # If dealing with single cell data, without cell_labels
+                elif (cell_labels_filt_df is None 
+                      and lin_reg_dict is None 
+                      and lin_reg is not None):
+                    
+                    # If the p_val (lin reg) is < threshold, add to this factor
+                    # Otherwise, keep the factor equal to 0
+                    factor = 0
+
+                    if lin_reg.loc[cell_name]['p_val'] < p_threshold:
+                        factor += lin_reg.loc[cell_name]['predicted']
+                    
+                    # Apply normalization formula
+                    normalized_val = (cell_count 
+                                - (factor)*background_std 
+                                - background_mean)
+                    
+                    normalized_counts.append(normalized_val)
+
+                # If dealing with single cell data, with cell labels
+                elif (cell_labels_filt_df is not None
+                      and lin_reg_dict is not None
+                      and lin_reg is None):
+                    
+                    factor = 0
+
+                    cell_type = _get_cell_type(cell_name, cell_labels_filt_df)
+
+                    # Look up this cell's linear regression dataframe in the dict
+                    if lin_reg_dict[cell_type].loc[cell_name]['p_val'] < p_threshold:
+
+                        # We can regress out the predicted z score
+                        factor += lin_reg_dict[cell_type].loc[cell_name]['predicted']
+
+                    # Apply normalization formula
+                    normalized_val = (cell_count 
+                                - (factor)*background_std 
+                                - background_mean)
+                    
+                    normalized_counts.append(normalized_val)
+        
+        norm_signal_counts = [x for x in normalized_counts if x != 0]
+
+        if len(norm_signal_counts) < 2:
+            normalized_z_scores = [background_cell_z_score] * len(data_vector)
+            return normalized_z_scores
+        else:
+            # For all a' values (non 0), calculate the mean and standard deviation
+            norm_sig_mean = statistics.mean(norm_signal_counts)
+            norm_sig_stdev = statistics.stdev(norm_signal_counts)
+
+            # Find the z_scores
+            for count in normalized_counts:
+                if count != 0:
+                    temp_z_score = (count - norm_sig_mean) / (norm_sig_stdev)
+                    if temp_z_score < background_cell_z_score:
+                        temp_z_score = background_cell_z_score
+                    normalized_z_scores.append(temp_z_score)
+                elif count == 0:
+                    normalized_z_scores.append(background_cell_z_score)
+            
+            return normalized_z_scores
+
+def _normalize_antibodies_df(protein_cleaned_filt_df: pd.DataFrame, 
+                             fit_all_results: list,
+                             p_threshold: float = 0.05,
+                             background_cell_z_score: int = -10,
+                             classified_filt_df: pd.DataFrame = None, 
+                             cell_labels_filt_df: pd.DataFrame = None, 
+                             lin_reg_dict: dict = None,
+                             lin_reg: pd.DataFrame = None) -> pd.DataFrame:
+    """
+    Normalizes all antibodies in a protein dataset
+
+    Parameters:
+        protein_cleaned_filt_df (pd.DataFrame): containing all cells and
+            antibodies, except those that have been filtered out based
+            on level of expression
+        fit_all_results (list): list of dictionaries containing 
+            optimization results for each antibody
+        p_threshold (float): threshold for p value rejection
+        background_cell_z_score (int): z-score value for background cells
+            when computing a z-score table for all normalized counts
+        classified_filt_df (pd.DataFrame): contains classification for 
+            all cells except those filtered by expression level
+        cell_labels_filt_df (pd.DataFrame): contains cell
+            labels for all cells except those filtered by expression level
+        lin_reg_dict (dict): results of linear regression separated by
+            cell type 
+        lin_reg (pd.DataFrame): results of linear regression without
+            separating by cell type
+
+    Returns:
+        normalized_df_transpose (pd.DataFrame): 
+    """
+
+    normalized_list = []
+
+    for index, (ab_name, counts) in enumerate(protein_cleaned_filt_df.items()):
+        norm_ab_counts = _normalize_antibody(
+                            fit_results=fit_all_results[index], 
+                            data_vector=counts, 
+                            ab_name=ab_name, 
+                            p_threshold=p_threshold,
+                            background_cell_z_score=background_cell_z_score,
+                            classified_filt_df=classified_filt_df, 
+                            cell_labels_filt_df=cell_labels_filt_df, 
+                            lin_reg_dict=lin_reg_dict,
+                            lin_reg=lin_reg)
+        
+        normalized_list.append(norm_ab_counts)
+
+    normalized_df = pd.DataFrame(normalized_list, 
+                                index=protein_cleaned_filt_df.columns, 
+                                columns=protein_cleaned_filt_df.index)
+    
+    # Transpose so the correct row/column labels are put
+    normalized_df_transpose = normalized_df.T
+
+    return normalized_df_transpose
 
 class ImmunoPhenoError(Exception):
     """A base class for ImmunoPheno Exceptions."""
@@ -993,7 +1173,6 @@ class ImmunoPhenoData:
                 data_vector = _log_transform(d_vect=data_vector,
                                             scale=transform_scale)
                 transformed = True
-
             elif transform_type == 'arcsinh':
                 data_vector = _arcsinh_transform(d_vect=data_vector,
                                                 scale=transform_scale)
@@ -1077,184 +1256,6 @@ class ImmunoPhenoData:
 
         return fit_all_results
 
-    def _normalize_antibody(self, 
-                           fit_results: dict, 
-                           data_vector: list, 
-                           ab_name: str, 
-                           p_threshold: float = 0.05,
-                           background_cell_z_score = -10, 
-                           classified_filt_df: pd.DataFrame = None,
-                           cell_labels_filt_df: pd.DataFrame = None, 
-                           lin_reg_dict: dict = None,
-                           lin_reg: pd.DataFrame = None) -> list:
-        """
-        Normalizes single cell or flow cytometry values for an antibody
-
-        Parameters:
-            fit_results (dict): optimization results for an antibody, containing
-                three mixture models and their respective parameter results
-            data_vector (list): raw ADT values from protein data 
-            ab_name (str): name of antibody
-            p_threshold (float): threshold for p value rejection
-            background_cell_z_score (int): z-score value for background cells
-                when computing a z-score table for all normalized counts
-            classified_filt_df (pd.DataFrame): contains classification for 
-                all cells except those filtered by expression level
-            cell_labels_filt_df (pd.DataFrame): contains cell
-                labels for all cells except those filtered by expression level
-            lin_reg_dict (dict): results of linear regression separated by
-                cell type 
-            lin_reg (pd.DataFrame): results of linear regression without
-                separating by cell type
-
-        Returns:
-            normalized_z_scores (list): normalized z scores for an antibody
-        """
-        normalized_counts = []
-        normalized_z_scores = []
-
-        # Get background mean and standard deviation of either GMM or NB model
-        background_mean, background_std = _bg_mean_std(fit_results)
-
-        # Get the classified cell vector for this antibody
-        classified_cells = classified_filt_df[ab_name].values
-
-        # Raw data vector
-        for i, (cell_name, cell_count) in enumerate(data_vector.items()):
-            if classified_cells[i] == 0:
-                normalized_counts.append(0)
-
-            elif classified_cells[i] == 1:
-
-                # If dealing with flow cytometry data
-                if (cell_labels_filt_df is None 
-                    and lin_reg_dict is None 
-                    and lin_reg is None):
-                    # Apply normalization formula
-                    normalized_val = cell_count - background_mean
-                    normalized_counts.append(normalized_val)
-                
-                # If dealing with single cell data, without cell_labels
-                elif (cell_labels_filt_df is None 
-                      and lin_reg_dict is None 
-                      and lin_reg is not None):
-                    
-                    # If the p_val (lin reg) is < threshold, add to this factor
-                    # Otherwise, keep the factor equal to 0
-                    factor = 0
-
-                    if lin_reg.loc[cell_name]['p_val'] < p_threshold:
-                        factor += lin_reg.loc[cell_name]['predicted']
-                    
-                    # Apply normalization formula
-                    normalized_val = (cell_count 
-                                - (factor)*background_std 
-                                - background_mean)
-                    
-                    normalized_counts.append(normalized_val)
-
-                # If dealing with single cell data
-                elif (cell_labels_filt_df is not None
-                      and lin_reg_dict is not None
-                      and lin_reg is None):
-                    
-                    factor = 0
-
-                    cell_type = _get_cell_type(cell_name, cell_labels_filt_df)
-
-                    # Look up this cell's linear regression dataframe in the dict
-                    if lin_reg_dict[cell_type].loc[cell_name]['p_val'] < p_threshold:
-
-                        # We can regress out the predicted z score
-                        factor += lin_reg_dict[cell_type].loc[cell_name]['predicted']
-
-                    # Apply normalization formula
-                    normalized_val = (cell_count 
-                                - (factor)*background_std 
-                                - background_mean)
-                    
-                    normalized_counts.append(normalized_val)
-        
-        norm_signal_counts = [x for x in normalized_counts if x != 0]
-
-        if len(norm_signal_counts) < 2:
-            normalized_z_scores = [background_cell_z_score] * len(data_vector)
-            return normalized_z_scores
-        else:
-            # For all a' values (non 0), calculate the mean and standard deviation
-            norm_sig_mean = statistics.mean(norm_signal_counts)
-            norm_sig_stdev = statistics.stdev(norm_signal_counts)
-
-            # Find the z_scores
-            for count in normalized_counts:
-                if count != 0:
-                    temp_z_score = (count - norm_sig_mean) / (norm_sig_stdev)
-                    normalized_z_scores.append(temp_z_score)
-                
-                elif count == 0:
-                    normalized_z_scores.append(background_cell_z_score)
-            
-            return normalized_z_scores
-
-    def _normalize_antibodies_df(self,
-                                 protein_cleaned_filt_df: pd.DataFrame, 
-                                 fit_all_results: list,
-                                 p_threshold: float = 0.05,
-                                 background_cell_z_score: int = -10,
-                                 classified_filt_df: pd.DataFrame = None, 
-                                 cell_labels_filt_df: pd.DataFrame = None, 
-                                 lin_reg_dict: dict = None,
-                                 lin_reg: pd.DataFrame = None) -> pd.DataFrame:
-        """
-        Normalizes all antibodies in a protein dataset
-
-        Parameters:
-            protein_cleaned_filt_df (pd.DataFrame): containing all cells and
-                antibodies, except those that have been filtered out based
-                on level of expression
-            fit_all_results (list): list of dictionaries containing 
-                optimization results for each antibody
-            p_threshold (float): threshold for p value rejection
-            background_cell_z_score (int): z-score value for background cells
-                when computing a z-score table for all normalized counts
-            classified_filt_df (pd.DataFrame): contains classification for 
-                all cells except those filtered by expression level
-            cell_labels_filt_df (pd.DataFrame): contains cell
-                labels for all cells except those filtered by expression level
-            lin_reg_dict (dict): results of linear regression separated by
-                cell type 
-            lin_reg (pd.DataFrame): results of linear regression without
-                separating by cell type
-
-        Returns:
-            normalized_df_transpose (pd.DataFrame): 
-        """
-
-        normalized_list = []
-
-        for index, (ab_name, counts) in enumerate(protein_cleaned_filt_df.items()):
-            norm_ab_counts = self._normalize_antibody(
-                                fit_results=fit_all_results[index], 
-                                data_vector=counts, 
-                                ab_name=ab_name, 
-                                p_threshold=p_threshold,
-                                background_cell_z_score=background_cell_z_score,
-                                classified_filt_df=classified_filt_df, 
-                                cell_labels_filt_df=cell_labels_filt_df, 
-                                lin_reg_dict=lin_reg_dict,
-                                lin_reg=lin_reg)
-            
-            normalized_list.append(norm_ab_counts)
-
-        normalized_df = pd.DataFrame(normalized_list, 
-                                    index=protein_cleaned_filt_df.columns, 
-                                    columns=protein_cleaned_filt_df.index)
-        
-        # Transpose so the correct row/column labels are put
-        normalized_df_transpose = normalized_df.T
-
-        return normalized_df_transpose
-
     def normalize_all_antibodies(self,
                                  p_threshold: float = 0.05,
                                  sig_expr_threshold: float = 0.85,
@@ -1334,7 +1335,7 @@ class ImmunoPhenoData:
             self._linear_reg_df = lin_reg_type
 
             # Normalize all protein values
-            normalized_df = self._normalize_antibodies_df(
+            normalized_df = _normalize_antibodies_df(
                                     protein_cleaned_filt_df=protein_cleaned_filt, 
                                     fit_all_results=all_fits,
                                     p_threshold=p_threshold,
@@ -1350,7 +1351,7 @@ class ImmunoPhenoData:
             lin_reg = _linear_reg(z_umi)
 
             # Normalize all protein values
-            normalized_df = self._normalize_antibodies_df(
+            normalized_df = _normalize_antibodies_df(
                                     protein_cleaned_filt_df=protein_cleaned_filt, 
                                     fit_all_results=all_fits,
                                     p_threshold=p_threshold,
@@ -1361,7 +1362,7 @@ class ImmunoPhenoData:
         # Else, normalize values for flow cytometry data
         else:
             # Normalize all values in the protein matrix
-            normalized_df = self._normalize_antibodies_df(
+            normalized_df = _normalize_antibodies_df(
                                     protein_cleaned_filt_df=protein_cleaned_filt, 
                                     fit_all_results=all_fits,
                                     p_threshold=p_threshold,
