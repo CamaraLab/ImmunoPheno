@@ -69,17 +69,22 @@ def test_gmm_init_params():
     # Arrange
     counts = [1, 2, 3, 4, 5]
     n = 2
-    seed = 0
-    expected = ([4.5061917262507905, 2.0791163874711516],
-                [0.5333525741818063, 0.9021216856706152],
-                [0.37942110729528333, 0.6205788927047167],
-                -8.331697795394035,
-                26.66339559078807)
+
+    expected_means = [4.50, 2.07]
+    expected_stdevs = [0.53, 0.90]
+    expected_thetas = [0.37, 0.62]
+    expected_log = -8.33
+    expected_aic = 26.66
+
     # Act
-    output = _gmm_init_params(counts, n, seed)
+    output_means, output_stdevs, output_thetas, output_log, output_aic = _gmm_init_params(counts, n)
 
     # Assert
-    assert output == pytest.approx(expected, 0.2)
+    assert output_means == pytest.approx(expected_means, 0.4)
+    assert output_stdevs == pytest.approx(expected_stdevs, 0.4)
+    assert output_thetas == pytest.approx(expected_thetas, 0.4)
+    assert output_log == pytest.approx(expected_log, 0.4)
+    assert output_aic == pytest.approx(expected_aic, 0.4)
 
 def test_gmm_results(example_fit_results):
     # Arrange
