@@ -5,9 +5,9 @@ name: tests
 
 on:
   push:
-    branches: [ "package-dev" ]
+    branches: [ "main" ]
   pull_request:
-    branches: [ "package-dev" ]
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
