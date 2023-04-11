@@ -5,9 +5,9 @@ name: tests
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "package-dev" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "package-dev" ]
 
 jobs:
   build:
