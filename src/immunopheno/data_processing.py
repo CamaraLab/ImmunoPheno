@@ -1062,38 +1062,16 @@ class ImmunoPhenoData:
         
         # Single cell
         if self._protein_matrix is not None and self._gene_matrix is not None:
-            try:
-                protein_df = pd.read_csv(protein_matrix, sep=',', index_col=[0])
-                self._protein_matrix = _clean_adt(protein_df)
-            except:
-                raise Exception("Error loading protein csv into pandas dataframe. "
-                                "Please check file path.")
-            
-            try:
-                gene_df = pd.read_csv(gene_matrix, sep=',', index_col=[0])
-                self._gene_matrix = _clean_rna(gene_df)
-            except:
-                raise Exception("Error loading gene csv into pandas dataframe. "
-                                "Please check file path.")
+            self._protein_matrix = _clean_adt(self._protein_matrix)
+            self._gene_matrix = _clean_rna(self._gene_matrix)
         # Flow
         elif self._protein_matrix is not None and self._gene_matrix is None:
-            try:
-                protein_df = pd.read_csv(protein_matrix, sep=',', index_col=[0])
-                self._protein_matrix = _clean_adt(protein_df)
-            except:
-                raise Exception("Error loading protein csv into pandas dataframe. "
-                                "Please check file path.")
-                
+            self._protein_matrix = self._protein_matrix
             self._gene_matrix = None
 
         # If dealing with single cell data
         if self._cell_labels is not None:
-            try:
-                cell_labels_df = pd.read_csv(cell_labels, header=None, sep=',')
-                self._cell_labels = _clean_labels(cell_labels_df)
-            except:
-                raise Exception("Error loading cell labels csv into pandas dataframe. "
-                                "Please check file path.")
+            self._cell_labels = _clean_labels(self._cell_labels)
         else:
             cell_labels = None
     
