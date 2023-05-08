@@ -6,7 +6,7 @@ import statistics
 import warnings
 import logging
 
-from src.immunopheno.models import _gmm_results, _nb_mle_results
+from .models import _gmm_results, _nb_mle_results
 from sklearn.linear_model import LinearRegression
 
 def _clean_adt(protein_df: pd.DataFrame) -> pd.DataFrame:
@@ -1025,19 +1025,21 @@ class ImmunoPhenoData:
     Parameters:
         protein_matrix (pd.DataFrame): ADT count matrix with cell x antibodies
         gene_matrix (pd.DataFrame): UMI count matrix with cell x genes
-        cell_labels (pd.DataFrame): matrix with cell x cell type if using
-            single-cell data
+        cell_labels (pd.DataFrame): matrix with cell x cell type (ex: Cell Ontologies)
+        label_certainties (pd.DataFrame): matrix with cell x delta.next (certainity)
     """
     def __init__(self, 
                  protein_matrix: pd.DataFrame = None, 
                  gene_matrix: pd.DataFrame = None,
                  cell_labels: pd.DataFrame = None,
+                 label_certainties: pd.DataFrame = None,
                  idAb_alias: pd.DataFrame = None):
         
         # Raw values
         self._protein_matrix = protein_matrix
         self._gene_matrix = gene_matrix
         self._cell_labels = cell_labels
+        self._label_certainties = label_certainties
         self._idAb_alias = idAb_alias
         
         # Calculated values
@@ -1060,16 +1062,38 @@ class ImmunoPhenoData:
         
         # Single cell
         if self._protein_matrix is not None and self._gene_matrix is not None:
-            self._protein_matrix = _clean_adt(self._protein_matrix)
-            self._gene_matrix = _clean_rna(self._gene_matrix)
+            try:
+                protein_df = pd.read_csv(protein_matrix, sep=',', index_col=[0])
+                self._protein_matrix = _clean_adt(protein_df)
+            except:
+                raise Exception("Error loading protein csv into pandas dataframe. "
+                                "Please check file path.")
+            
+            try:
+                gene_df = pd.read_csv(gene_matrix, sep=',', index_col=[0])
+                self._gene_matrix = _clean_rna(gene_df)
+            except:
+                raise Exception("Error loading gene csv into pandas dataframe. "
+                                "Please check file path.")
         # Flow
         elif self._protein_matrix is not None and self._gene_matrix is None:
-            self._protein_matrix = self._protein_matrix
+            try:
+                protein_df = pd.read_csv(protein_matrix, sep=',', index_col=[0])
+                self._protein_matrix = _clean_adt(protein_df)
+            except:
+                raise Exception("Error loading protein csv into pandas dataframe. "
+                                "Please check file path.")
+                
             self._gene_matrix = None
 
         # If dealing with single cell data
         if self._cell_labels is not None:
-            self._cell_labels = _clean_labels(self._cell_labels)
+            try:
+                cell_labels_df = pd.read_csv(cell_labels, header=None, sep=',')
+                self._cell_labels = _clean_labels(cell_labels_df)
+            except:
+                raise Exception("Error loading cell labels csv into pandas dataframe. "
+                                "Please check file path.")
         else:
             cell_labels = None
     
@@ -1090,12 +1114,28 @@ class ImmunoPhenoData:
         return self._protein_matrix
 
     @property
+    def gene_cleaned(self):
+        return self._gene_matrix
+
+    @property
     def norm_cell_labels(self):
         return self._cell_labels_filt_df
     
     @property
     def raw_cell_labels(self):
         return self._cell_labels
+    
+    @raw_cell_labels.setter
+    def raw_cell_labels(self, value):
+        self._cell_labels = value
+
+    @property
+    def label_certainties(self):
+        return self._label_certainties
+    
+    @label_certainties.setter
+    def label_certainties(self, value):
+        self._label_certainties = value
 
     def fit_antibody(self,
                      input: list,
