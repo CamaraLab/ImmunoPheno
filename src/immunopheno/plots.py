@@ -2,7 +2,7 @@ import seaborn as sns
 import plotly.express as px
 import umap
 
-from src.immunopheno.data_processing import _correlation_ab, PlotUMAPError
+from .data_processing import _correlation_ab, PlotUMAPError
 
 def plot_antibody_correlation(IPD):
     """
