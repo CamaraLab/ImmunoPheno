@@ -384,6 +384,15 @@ def _filter_classified_df(classified_df: pd.DataFrame,
     # Filter out cells that have a majority expressing background (user-defined)
     filtered_df = filtered_df[(((filtered_df == 1).sum(axis=1)
                                 / num_ab) >= bg_threshold)]
+    
+    # Clarifying messages for total number of filtered cells
+    additional_filt = len(all_filt.index) - len(filtered_df.index)
+    logging.warning(f" {additional_filt} additional cells have been filtered "
+                    f"based on {sig_threshold} sig_expr and {bg_threshold} "
+                    "bg_expr thresholds.")
+    
+    total_filt = num_filt + additional_filt
+    logging.warning(f" Total cells filtered: {total_filt}")
 
     return filtered_df
 
