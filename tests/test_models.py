@@ -56,11 +56,14 @@ def test_plot_fits(mocker, example_fit_results):
 
 def test_plot_all_fits(mocker, example_fit_results):
     # Arrange
-    counts_df = pd.DataFrame({'ab1': [153, 235, 4, 2]})
+    mock_IPD = mocker.Mock()
+    mock_IPD.protein_cleaned = pd.DataFrame({'ab1': [153, 235, 4, 2]})
+    mock_IPD._all_fits = [example_fit_results]
+
     mock_all_plots = mocker.patch("src.immunopheno.models.plot_fits")
 
     # Act
-    plot_all_fits(counts_df, [example_fit_results])
+    plot_all_fits(mock_IPD)
 
     # Assert
     mock_all_plots.assert_called()
