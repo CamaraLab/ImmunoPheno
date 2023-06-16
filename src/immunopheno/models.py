@@ -232,17 +232,15 @@ def plot_fits(counts: list,
 
                 plt.show()
 
-def plot_all_fits(protein_data: pd.DataFrame,
-                  all_fits: list,
+def plot_all_fits(IPD,
                   plot_percentile: float = 99.5,
                   transformed: bool = False):
     """
     Plots all antibody histograms and mixture model fits
 
     Parameters:
-        protein_data (pd.DataFrame): matrix containing cells x antibodies
-        all_fits (list): list of dictionaries, with each dictionary 
-            containing results from optimization for an antibody 
+        IPD (ImmunoPhenoData Object): Object containing all fits from 
+            mixture models
         plot_percentile (float): set plot range of graph based on percentile
         transformed (bool): indicate whether data has been transformed
     
@@ -250,11 +248,13 @@ def plot_all_fits(protein_data: pd.DataFrame,
         A series of plots with each type of mixture model for every antibody
         in the protein data
     """
+    if IPD._all_fits is None:
+        raise Exception("No fits found. Call fit_all_antibodies first")
     
-    for index, ab in enumerate(protein_data):
+    for index, ab in enumerate(IPD.protein_cleaned):
         print("Antibody:", ab)
-        plot_fits(protein_data.loc[:, ab], 
-                  all_fits[index],
+        plot_fits(IPD.protein_cleaned.loc[:, ab],
+                  IPD._all_fits[index],
                   plot_percentile=plot_percentile,
                   transformed=transformed)
 
