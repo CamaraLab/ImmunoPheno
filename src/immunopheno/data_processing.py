@@ -1153,6 +1153,9 @@ class ImmunoPhenoData:
         Parameters:
             index (list/pandas.core.indexes.base.Index): list of cell names
         """
+        # Before updating the index, reset it back to its original
+        self.reset_index()
+        
         self._protein_matrix = self._protein_matrix.loc[index]
         self._gene_matrix = self._gene_matrix.loc[index]
         self._cell_labels = self._cell_labels.loc[index]
