@@ -1050,6 +1050,12 @@ class ImmunoPhenoData:
         self._cell_labels = cell_labels
         self._label_certainties = label_certainties
         self._idAb_alias = idAb_alias
+
+        # Temp values (for resetting index)
+        self._temp_protein = None
+        self._temp_gene = None
+        self._temp_labels = None
+        self._temp_certainties = None
         
         # Calculated values
         self._all_fits = None
@@ -1072,7 +1078,10 @@ class ImmunoPhenoData:
         # Single cell
         if self._protein_matrix is not None and self._gene_matrix is not None:
             self._protein_matrix = _clean_adt(self._protein_matrix)
+            self._temp_protein = _clean_adt(protein_matrix)
+
             self._gene_matrix = _clean_rna(self._gene_matrix)
+            self._temp_gene = _clean_rna(gene_matrix)
         # Flow
         elif self._protein_matrix is not None and self._gene_matrix is None:
             self._protein_matrix = self._protein_matrix
@@ -1081,6 +1090,7 @@ class ImmunoPhenoData:
         # If dealing with single cell data
         if self._cell_labels is not None:
             self._cell_labels = _clean_labels(self._cell_labels)
+            self._temp_labels = _clean_labels(cell_labels)
         else:
             cell_labels = None
     
@@ -1124,13 +1134,37 @@ class ImmunoPhenoData:
     def label_certainties(self, value):
         self._label_certainties = value
 
+    def reset_index(self):
+        """
+        Resets all dataframe values using original index
+
+        """
+        self._protein_matrix = self._temp_protein
+        self._gene_matrix = self._temp_gene
+        self._cell_labels = self._temp_labels
+        self._label_certainties = self._temp_certainties
+
+    def update_index(self,
+                     index: list):
+        """
+        Updates the index of cells for each dataframe 
+        in an ImmunoPhenoData object
+
+        Parameters:
+            index (list/pandas.core.indexes.base.Index): list of cell names
+        """
+        self._protein_matrix = self._protein_matrix.loc[index]
+        self._gene_matrix = self._gene_matrix.loc[index]
+        self._cell_labels = self._cell_labels.loc[index]
+        self._label_certainties = self._label_certainties.loc[index]
+
     def fit_antibody(self,
                      input: list,
+                     ab_name: str = None,
                      transform_type: str = None,
                      transform_scale: int = 1,
                      model: str = 'gaussian',
-                     plot: bool = False, 
-                     plot_percentile: float = 99.5,
+                     plot: bool = False,
                      **kwargs) -> dict:
         """
         Fits a mixture model to an antibody and returns its optimal parameters
@@ -1143,7 +1177,6 @@ class ImmunoPhenoData:
             transform_scale (int): multiplier applied during transformation
             model (str): type of model to fit. "gaussian" or "nb"
             plot (bool): option to plot each model
-            plot_percentile (float): set plot range of graph based on percentile
             **kwargs: initial arguments for sklearn's GaussianMixture (optional)
             
         Returns:
@@ -1167,10 +1200,6 @@ class ImmunoPhenoData:
 
         if isinstance(plot, bool) == False:
             raise PlotAntibodyFitError("'plot' must be a boolean value.")
-        
-        if (isinstance(plot_percentile, float) == False and 
-            isinstance(plot_percentile, int) == False):
-            raise PlotPercentileError("'plot_percentile' must be an int or float value.")
 
         # Check if all_fits_dict exists
         if self._all_fits_dict is None:
@@ -1186,6 +1215,8 @@ class ImmunoPhenoData:
             # if input in self._protein_matrix.columns:
             try:
                 data_vector = list(self._protein_matrix.loc[:, input].values)
+                # Also set ab_name to input, since input is the string of the antibody
+                ab_name = input
                 individual = True   
             except:
                 raise AntibodyLookupError(f"'{input}' not found in protein data.")   
@@ -1193,28 +1224,26 @@ class ImmunoPhenoData:
         else:
             data_vector = input
 
-        transformed = False
 
         if transform_type is not None:     
             if transform_type == 'log':
                 data_vector = _log_transform(d_vect=data_vector,
                                             scale=transform_scale)
-                transformed = True
+
             elif transform_type == 'arcsinh':
                 data_vector = _arcsinh_transform(d_vect=data_vector,
                                                 scale=transform_scale)
-                transformed = True
+
             else:
                 raise TransformTypeError(("Invalid transformation type. " 
                                           "Please choose 'log' or 'arcsinh'. "
                                           "Default: None."))
             
         if model == 'gaussian':
-            gauss_params = _gmm_results(counts=data_vector, 
-                                               transformed=transformed, 
-                                               plot=plot, 
-                                               plot_percentile=plot_percentile,
-                                               **kwargs)
+            gauss_params = _gmm_results(counts=data_vector,
+                                        ab_name=ab_name, 
+                                        plot=plot, 
+                                        **kwargs)
 
             # Check if a params already exists in dict
             if individual:
@@ -1229,9 +1258,8 @@ class ImmunoPhenoData:
 
         elif model == 'nb':
             nb_params = _nb_mle_results(counts=data_vector,
-                                               transformed=transformed,
-                                               plot=plot,
-                                               plot_percentile=plot_percentile)
+                                        ab_name=ab_name,
+                                        plot=plot)
 
             if individual:
                 self._all_fits_dict[input] = nb_params
@@ -1244,7 +1272,6 @@ class ImmunoPhenoData:
                            transform_scale: int = 1,
                            model: str = 'gaussian',
                            plot: bool = False, 
-                           plot_percentile: float = 99.5,
                            **kwargs) -> list:
         """
         Applies fit_antibody to each antibody in the protein count matrix
@@ -1255,7 +1282,6 @@ class ImmunoPhenoData:
             transform_scale (int): multiplier applied during transformation
             model (str): type of model to fit. "gaussian" or "nb"
             plot (bool): option to plot each model
-            plot_percentile (float): set plot range of graph based on percentile
             **kwargs: initial arguments for sklearn's GaussianMixture (optional) 
 
         Returns:
@@ -1266,14 +1292,14 @@ class ImmunoPhenoData:
         fit_all_results = []
 
         for ab in self._protein_matrix:
-            if plot: # Print antibody name if plotting
-                print("Antibody:", ab)
+            # if plot: # Print antibody name if plotting
+                # print("Antibody:", ab)
             fits = self.fit_antibody(input=self._protein_matrix.loc[:, ab], 
+                                     ab_name=ab,
                                      transform_type=transform_type,
                                      transform_scale=transform_scale, 
                                      model=model,
                                      plot=plot,
-                                     plot_percentile=plot_percentile,
                                      **kwargs)
             self._all_fits_dict[ab] = fits
             fit_all_results.append(fits)
