@@ -10,239 +10,333 @@ import scipy.optimize as so
 import scipy.special as sp
 
 from sklearn.mixture import GaussianMixture
+import plotly.express as px
+from plotly.subplots import make_subplots
 
-def plot_fits(counts: list,
-              fit_results: dict,
-              plot_percentile: float = 99.5,
-              transformed: bool = False):
+def _find_background_comp(fit_results: dict) -> int:
+    """
+    For an antibody, find the background component in a mixture model by
+    using the smallest mean
+
+    Parameters:
+        fit_results (dict): optimization results for an antibody, containing
+            three mixture models and their respective parameter results
+            Example: 
+                {3: {},
+                 2: {},
+                 1: {}}
+
+    Returns:
+        background_component (int): index of the background component in 
+            a mixture model.
+            Example:
+                0 = 1st component
+                1 = 2nd component
+                2 = 3rd component
+    """
+    
+    best_num_comp = next(iter(fit_results.items()))[0]
+    mix_model = next(iter(fit_results.items()))[1]
+
+    # Check if results is from Negative Binomial or Gaussian 
+    if mix_model['model'] == 'negative binomial (MLE)':
+        component_means_nb = []
+
+        n_params = mix_model['nb_n_params']
+        p_params = mix_model['nb_p_params']
+
+        # Calculate means for each individual component
+        for comp in range (best_num_comp):
+            mean = ss.nbinom.mean(n_params[comp], p_params[comp])
+            component_means_nb.append(mean)
+
+        # Return component with the smallest mean
+        background_component = component_means_nb.index(min(component_means_nb))
+
+    elif mix_model['model'] == 'gaussian (EM)':
+        gmm_means = mix_model['gmm_means']
+        background_component = gmm_means.index(min(gmm_means))
+        
+    return background_component
+
+def plot_fits(counts:list,
+              fit_results:dict,
+              ab_name:str):
     """
     Plots the fits of the mixture model for an antibody
 
     Parameters:
         counts (list): count values of cells for an antibody
         fit_results (dict): optimization results of a mixture model
-        plot_percentile (float): plot range of graph based on percentile
-        transformed (bool): indicate whether data has been transformed 
+        ab_name (str): name of antibody
     
     Returns:
-        Matplotlib graph containing a histogram of the counts and the plots
+        Plotly graph containing a histogram of the counts and the plots
         containing the individual components of each model
     """
-    fig, ax = plt.subplots(nrows = 1, ncols = 3, figsize = (20, 5))
-
-    plot_min = math.floor(np.percentile(counts, 100-plot_percentile))
-    plot_max = math.ceil(np.percentile(counts, plot_percentile))
     
-    # Change plot range if data is transformed
-    if transformed:
-        plot_range = np.arange(plot_min, plot_max, 0.01)
-    else:
-        if plot_max < 100:
-            plot_max = 100
-        plot_range = range(plot_min, plot_max)
-
-
-    # Get results from fit_results dict
+    countsMax = max(counts)
+    
+    # Make initial subplots 
+    fig = make_subplots(rows=1, 
+                        cols=3, 
+                        subplot_titles=("Negative Binomial Mixture Model (MLE): 1 Component",
+                                        "Negative Binomial Mixture Model (MLE): 2 Components", 
+                                        "Negative Binomial Mixture Model (MLE): 3 Components"))
+    
+    traceHistogram = px.histogram(counts, 
+                                  histnorm='probability density', 
+                                  opacity=0.75, 
+                                  color_discrete_sequence=['#1F77B4'])
+    
+    fig.add_trace(traceHistogram.data[0], row=1, col=1)
+    fig.add_trace(traceHistogram.data[0], row=1, col=2)
+    fig.add_trace(traceHistogram.data[0], row=1, col=3)
+    
+    # Find best mixture model
+    best_mixture_model = next(iter(fit_results.items()))[0]
+    
+    # AICs in order of 1 mixture, 2 mixtures, 3 mixtures
+    aics = []
+        
     for key, value in sorted(fit_results.items()):
-        if value['model'] == 'gaussian (EM)':
+        if value["model"] == 'negative binomial (MLE)':
+            # Find background component for each mixture model
+            tempDict = {key: value}
+            background_component =  _find_background_comp(tempDict)
+            
+            # Get all parameters
+            nb_thetas = value["nb_thetas"]
+            nb_n_params = value["nb_n_params"]
+            nb_p_params = value["nb_p_params"]
+            aic = value["aic"]
+            aics.append(aic)
+            
+            if value['num_comp'] == 1:
+                # Single component will always be background, so make it red
+                trace1a = px.line(1 * (ss.nbinom.pmf(range(countsMax), 
+                                                   nb_n_params[0], 
+                                                   nb_p_params[0])), 
+                                  color_discrete_sequence=["red"])
+
+                fig.add_trace(trace1a.data[0], row=1, col=1)
+            
+            if value["num_comp"] == 2:
+                # Plot combined components
+                trace2 = px.line(nb_thetas[0]
+                                 * (ss.nbinom.pmf(range(countsMax),
+                                                  nb_n_params[0],
+                                                  nb_p_params[0]))
+                                 + (1 - nb_thetas[0])
+                                 * (ss.nbinom.pmf(range(countsMax),
+                                                  nb_n_params[1],
+                                                  nb_p_params[1])),
+                                color_discrete_sequence=["orange"])
+                fig.add_trace(trace2.data[0], row=1, col=2)
+                
+                # Plotting individual components
+                line_colors = ["green"]
+                for index in range(2):
+                    tempThetas = nb_thetas.copy()
+                    tempThetas.append(1 - nb_thetas[0])
+                    
+                    # If this is the background component
+                    if index == background_component:
+                        trace2a = px.line(tempThetas[index] 
+                                          * (ss.nbinom.pmf(range(countsMax), 
+                                                           nb_n_params[index], 
+                                                           nb_p_params[index])), 
+                                            color_discrete_sequence=["red"])
+                        fig.add_trace(trace2a.data[0], row=1, col=2)
+                    else:
+                        nextColor = line_colors.pop()
+                        trace2b = px.line(tempThetas[index] 
+                                          * (ss.nbinom.pmf(range(countsMax), 
+                                                           nb_n_params[index], 
+                                                           nb_p_params[index])), 
+                                            color_discrete_sequence=[nextColor])
+                        fig.add_trace(trace2b.data[0], row=1, col=2)
+            
+            if value["num_comp"] == 3:
+                # Plot combined components
+                trace3 = px.line(nb_thetas[0]
+                                 * (ss.nbinom.pmf(range(countsMax),
+                                                  nb_n_params[0],
+                                                  nb_p_params[0]))
+                                 + nb_thetas[1]
+                                 * (ss.nbinom.pmf(range(countsMax),
+                                                  nb_n_params[1],
+                                                  nb_p_params[1]))
+                                 + (1 - nb_thetas[0]
+                                      - nb_thetas[1])
+                                 * (ss.nbinom.pmf(range(countsMax),
+                                                  nb_n_params[2],
+                                                  nb_p_params[2])),
+                                    color_discrete_sequence=["orange"])
+                fig.add_trace(trace3.data[0], row=1, col=3)
+                
+                # Plotting individual components
+                line_colors = ["blue", "green"]
+                
+                for index in range(3):
+                    tempThetas = nb_thetas.copy()
+                    tempThetas.append(1 - nb_thetas[0] - nb_thetas[1])
+                    
+                    # If this is the background component
+                    if index == background_component:
+                        trace3a = px.line(tempThetas[index] 
+                                          * (ss.nbinom.pmf(range(countsMax), 
+                                                           nb_n_params[index], 
+                                                           nb_p_params[index])), 
+                                            color_discrete_sequence=["red"])
+                        fig.add_trace(trace3a.data[0], row=1, col=3)
+                    else:
+                        nextColor = line_colors.pop()
+                        trace3b = px.line(tempThetas[index] 
+                                          * (ss.nbinom.pmf(range(countsMax), 
+                                                           nb_n_params[index], 
+                                                           nb_p_params[index])), 
+                                            color_discrete_sequence=[nextColor])
+                        fig.add_trace(trace3b.data[0], row=1, col=3)
+                        
+        elif value["model"] == "gaussian (EM)":
+            # Find background component for each mixture model
+            tempDict = {key: value}
+            background_component =  _find_background_comp(tempDict)
+            
             # Get all parameters:
             gmm_thetas = value['gmm_thetas']
             gmm_means = value['gmm_means']
             gmm_stdevs = value['gmm_stdevs']
-
-            if value['num_comp'] == 1:
-                ax[0].set_title("Gaussian Mixture Model (EM): 1 component")
-                ax[0].hist(counts, 
-                            bins=100, 
-                            range=[plot_min, plot_max], 
-                            density=True,
-                            alpha=0.5)
-
-                ax[0].plot(plot_range,
-                            gmm_thetas[0] * (ss.norm.pdf(plot_range, 
-                                                        gmm_means[0], 
-                                                        gmm_stdevs[0])))
+            aic = value["aic"]
+            aics.append(aic)
             
-            if value['num_comp'] == 2:
-                ax[1].set_title("Gaussian Mixture Model (EM): 2 component")
-                ax[1].hist(counts, 
-                           bins=100, 
-                           range=[plot_min, plot_max], 
-                           density=True, 
-                           alpha=0.5)
+            if value["num_comp"] == 1:
+                # Update title to Gaussian
+                fig.layout.annotations[0].update(text="Gaussian Mixture Model (EM): 1 Component")
                 
-                # Combined components
-                ax[1].plot(plot_range, 
-                           gmm_thetas[0] * (ss.norm.pdf(plot_range, 
-                                                        gmm_means[0], 
-                                                        gmm_stdevs[0])) 
-                         + ((1 - gmm_thetas[0]) * (ss.norm.pdf(plot_range, 
-                                                               gmm_means[1], 
-                                                               gmm_stdevs[1]))))
+                 # Single component will always be background, so make it red
+                trace1a = px.line(1 * (ss.norm.pdf(range(countsMax), 
+                                                   gmm_means[0], 
+                                                   gmm_stdevs[0])), 
+                                  color_discrete_sequence=["red"])
 
-                # Component 1
-                ax[1].plot(plot_range, 
-                           gmm_thetas[0] * (ss.norm.pdf(plot_range, 
-                                                        gmm_means[0], 
-                                                        gmm_stdevs[0])),'g-')
-                
-                # Component 2
-                ax[1].plot(plot_range, 
-                           ((1 - gmm_thetas[0]) 
-                         * (ss.norm.pdf(plot_range, 
-                                        gmm_means[1], 
-                                        gmm_stdevs[1]))),'r-')
-                
-            if value['num_comp'] == 3:
-                ax[2].set_title("Gaussian Mixture Model (EM): 3 component")
-                ax[2].hist(counts, 
-                           bins=100, 
-                           range=[plot_min, plot_max], 
-                           density=True, 
-                           alpha=0.5)
-                
-                # Combined components
-                ax[2].plot(plot_range, 
-                           gmm_thetas[0] * (ss.norm.pdf(plot_range,
-                                                        gmm_means[0],
-                                                        gmm_stdevs[0]))
-                         + gmm_thetas[1] * (ss.norm.pdf(plot_range,
-                                                        gmm_means[1], 
-                                                        gmm_stdevs[1]))
-                         + (1 - gmm_thetas[0] - gmm_thetas[1])
-                         * (ss.norm.pdf(plot_range, 
-                                        gmm_means[2], 
-                                        gmm_stdevs[2])))
-
-                # Component 1
-                ax[2].plot(plot_range, 
-                           gmm_thetas[0] * (ss.norm.pdf(plot_range,
-                                                        gmm_means[0],
-                                                        gmm_stdevs[0])),'g-')
-                
-                # Component 2
-                ax[2].plot(plot_range, 
-                            gmm_thetas[1] * (ss.norm.pdf(plot_range,
-                                                         gmm_means[1], 
-                                                         gmm_stdevs[1])),'r-')
-                
-                # Component 3
-                ax[2].plot(plot_range, 
-                           (1 - gmm_thetas[0] - gmm_thetas[1])
-                         * (ss.norm.pdf(plot_range, 
-                                        gmm_means[2], 
-                                        gmm_stdevs[2])), 'b-')
-
+                fig.add_trace(trace1a.data[0], row=1, col=1)
             
+            if value["num_comp"] == 2:
+                # Update title to Gaussian
+                fig.layout.annotations[1].update(text="Gaussian Mixture Model (EM): 2 Components")
                 
-            
-                plt.show()
-
-        elif value['model'] == 'negative binomial (MLE)':
-            # Get all parameters
-            nb_thetas = value['nb_thetas']
-            nb_n_params = value['nb_n_params']
-            nb_p_params = value['nb_p_params']
-            
-            if value['num_comp'] == 1:
-                ax[0].set_title(("Negative Binomial " 
-                                    "Mixture Model (MLE): 1 component"))
-                ax[0].hist(counts, 
-                        bins=100, 
-                        range=[0, plot_max], 
-                        density=True, 
-                        alpha=0.5)
-
-                ax[0].plot(range(plot_max), 
-                        (ss.nbinom.pmf(range(plot_max), 
-                                        nb_n_params[0], 
-                                        nb_p_params[0])))
-            
-            if value['num_comp'] == 2:
-                ax[1].set_title(("Negative Binomial " 
-                                 "Mixture Model (MLE): 2 component"))
-                ax[1].hist(counts, 
-                        bins=100,
-                        range=[0, plot_max], 
-                        density=True, 
-                        alpha=0.5)
+                # Plot combined components
+                trace2 = px.line(gmm_thetas[0]
+                                 * (ss.norm.pdf(range(countsMax),
+                                                  gmm_means[0],
+                                                  gmm_stdevs[0]))
+                                 + (1 - gmm_thetas[0])
+                                 * (ss.norm.pdf(range(countsMax),
+                                                  gmm_means[1],
+                                                  gmm_stdevs[1])),
+                                color_discrete_sequence=["orange"])
                 
-                ax[1].plot(range(plot_max), 
-                        nb_thetas[0] 
-                        * (ss.nbinom.pmf(range(plot_max), 
-                                         nb_n_params[0], 
-                                         nb_p_params[0])) 
-                        + (1 - nb_thetas[0])
-                        * (ss.nbinom.pmf(range(plot_max), 
-                                         nb_n_params[1], 
-                                         nb_p_params[1]))) 
+                fig.add_trace(trace2.data[0], row=1, col=2)
                 
-                ax[1].plot(range(plot_max), 
-                        nb_thetas[0] 
-                        * (ss.nbinom.pmf(range(plot_max), 
-                                         nb_n_params[0], 
-                                         nb_p_params[0])), 'g-')
+                # Plotting individual components
+                line_colors = ["green"]
+                for index in range(2):
+                    tempThetas = gmm_thetas.copy()
+                    tempThetas.append(1 - gmm_thetas[0])
+                    
+                    # If this is the background component
+                    if index == background_component:
+                        trace2a = px.line(tempThetas[index] 
+                                          * (ss.norm.pdf(range(countsMax), 
+                                                           gmm_means[index], 
+                                                           gmm_stdevs[index])), 
+                                            color_discrete_sequence=["red"])
+                        fig.add_trace(trace2a.data[0], row=1, col=2)
+                    else:
+                        nextColor = line_colors.pop()
+                        trace2b = px.line(tempThetas[index] 
+                                          * (ss.norm.pdf(range(countsMax), 
+                                                           gmm_means[index], 
+                                                           gmm_stdevs[index])), 
+                                            color_discrete_sequence=[nextColor])
+                        fig.add_trace(trace2b.data[0], row=1, col=2)
                 
-                ax[1].plot(range(plot_max), 
-                        (1 - nb_thetas[0])
-                        * (ss.nbinom.pmf(range(plot_max), 
-                                         nb_n_params[1], 
-                                         nb_p_params[1])), 'r-')
-            
-            if value['num_comp'] == 3:
-                ax[2].set_title(("Negative Binomial " 
-                                 "Mixture Model (MLE): 3 component"))
-                ax[2].hist(counts, 
-                        bins=100, 
-                        range=[0, plot_max], 
-                        density=True, 
-                        alpha=0.5)
+            if value["num_comp"] == 3:
+                # Update title to Gaussian
+                fig.layout.annotations[2].update(text="Gaussian Mixture Model (EM): 3 Components")
                 
-                ax[2].plot(range(plot_max), 
-                        nb_thetas[0] 
-                        * (ss.nbinom.pmf(range(plot_max),
-                                         nb_n_params[0], 
-                                         nb_p_params[0])) 
-                        + nb_thetas[1] 
-                        * (ss.nbinom.pmf(range(plot_max),
-                                         nb_n_params[1], 
-                                         nb_p_params[1])) 
-                        + (1 - nb_thetas[0] 
-                             - nb_thetas[1]) 
-                        * (ss.nbinom.pmf(range(plot_max), 
-                                         nb_n_params[2], 
-                                         nb_p_params[2])))
+                # Plot combined components
+                trace3 = px.line(gmm_thetas[0]
+                                 * (ss.norm.pdf(range(countsMax),
+                                                  gmm_means[0],
+                                                  gmm_stdevs[0]))
+                                 + gmm_thetas[1]
+                                 * (ss.norm.pdf(range(countsMax),
+                                                  gmm_means[1],
+                                                  gmm_stdevs[1]))
+                                 + (1 - gmm_thetas[0]
+                                      - gmm_thetas[1])
+                                 * (ss.norm.pdf(range(countsMax),
+                                                  gmm_means[2],
+                                                  gmm_stdevs[2])),
+                                    color_discrete_sequence=["orange"])
+                fig.add_trace(trace3.data[0], row=1, col=3)
+                
+                # Plotting individual components
+                line_colors = ["blue", "green"]
+                
+                for index in range(3):
+                    tempThetas = gmm_thetas.copy()
+                    tempThetas.append(1 - gmm_thetas[0] - gmm_thetas[1])
+                    
+                    # If this is the background component
+                    if index == background_component:
+                        trace3a = px.line(tempThetas[index] 
+                                          * (ss.norm.pdf(range(countsMax), 
+                                                           gmm_means[index], 
+                                                           gmm_stdevs[index])), 
+                                            color_discrete_sequence=["red"])
+                        fig.add_trace(trace3a.data[0], row=1, col=3)
+                    else:
+                        nextColor = line_colors.pop()
+                        trace3b = px.line(tempThetas[index] 
+                                          * (ss.norm.pdf(range(countsMax), 
+                                                           gmm_means[index], 
+                                                           gmm_stdevs[index])), 
+                                            color_discrete_sequence=[nextColor])
+                        fig.add_trace(trace3b.data[0], row=1, col=3)
+                
+                        
+    # Add "AIC: " prefix and bold heading to list of AICs
+    formatted_aics = []
+    for count, aic in enumerate(aics):
+        if count == best_mixture_model - 1:
+            formatted_aics.append(f"<b>AIC: {aic}<b>")
+        else:
+            formatted_aics.append(f"AIC: {aic}")
+    
+    fig.for_each_annotation(lambda a: a.update(text=f'{a.text}'))
+    fig.update_annotations(font=dict(family="Calibri", size=15))
+    fig.update_layout(height=600, 
+                      width=1500, 
+                      title_text=f'Antibody: {ab_name}' +'<br>' + f'<span style="font-size: 15px;">Best model: <b>{best_mixture_model} Component <b></span>', 
+                      showlegend=False)
 
-                ax[2].plot(range(plot_max), 
-                        nb_thetas[0] 
-                        * (ss.nbinom.pmf(range(plot_max),
-                                         nb_n_params[0], 
-                                         nb_p_params[0])), 'g-')  
-                ax[2].plot(range(plot_max), 
-                        nb_thetas[1] 
-                        * (ss.nbinom.pmf(range(plot_max),
-                                         nb_n_params[1], 
-                                         nb_p_params[1])), 'r-')  
-                ax[2].plot(range(plot_max), 
-                        (1 - nb_thetas[0] 
-                           - nb_thetas[1]) 
-                        * (ss.nbinom.pmf(range(plot_max), 
-                                         nb_n_params[2], 
-                                         nb_p_params[2])), 'b-')
+    fig['layout']['xaxis']['title']= formatted_aics[0]
+    fig['layout']['xaxis2']['title']= formatted_aics[1]
+    fig['layout']['xaxis3']['title']= formatted_aics[2]
+    
+    fig.show()
 
-                plt.show()
-
-def plot_all_fits(IPD,
-                  plot_percentile: float = 99.5,
-                  transformed: bool = False):
+def plot_all_fits(IPD):
     """
     Plots all antibody histograms and mixture model fits
 
     Parameters:
         IPD (ImmunoPhenoData Object): Object containing all fits from 
             mixture models
-        plot_percentile (float): set plot range of graph based on percentile
-        transformed (bool): indicate whether data has been transformed
     
     Returns:
         A series of plots with each type of mixture model for every antibody
@@ -252,11 +346,9 @@ def plot_all_fits(IPD,
         raise Exception("No fits found. Call fit_all_antibodies first")
     
     for index, ab in enumerate(IPD.protein_cleaned):
-        print("Antibody:", ab)
-        plot_fits(IPD.protein_cleaned.loc[:, ab],
-                  IPD._all_fits[index],
-                  plot_percentile=plot_percentile,
-                  transformed=transformed)
+        plot_fits(counts=IPD.protein_cleaned.loc[:, ab],
+                  fit_results=IPD._all_fits[index],
+                  ab_name=ab)
 
 def _gmm_init_params(counts: list,
                      n_components: int,
@@ -297,9 +389,8 @@ def _gmm_init_params(counts: list,
     return gmm_means, gmm_stdevs, gmm_thetas, gmm_log_like, gmm_aic
 
 def _gmm_results(counts: list,
-                 transformed : bool = False, 
+                 ab_name: str,
                  plot: bool = False, 
-                 plot_percentile: float = 99.5,
                  random_state: int = 0,
                  **kwargs) -> dict:
     """
@@ -308,9 +399,7 @@ def _gmm_results(counts: list,
 
     Parameters:
         counts (list): raw counts from protein data
-        transformed (bool): indicate whether data has been transformed 
         plot (bool): option to plot each model
-        plot_percentile (float): set plot range of graph based on percentile
         random_state (int): seed value
         **kwargs: initial arguments for sklearn's GaussianMixture (optional)
 
@@ -343,9 +432,8 @@ def _gmm_results(counts: list,
 
     if plot:
         plot_fits(counts=counts,
-                        fit_results=sorted_results,
-                        plot_percentile=plot_percentile,
-                        transformed=transformed)
+                  fit_results=sorted_results,
+                  ab_name=ab_name)
         
     return sorted_results
 
@@ -721,10 +809,9 @@ def _aic_nb(log_like: float,
     """
     return (-2 * log_like) + 2 * num_param
 
-def _nb_mle_results(counts: list,
-                    transformed: bool = False, 
-                    plot: bool = False, 
-                    plot_percentile: float = 99.5) -> dict:
+def _nb_mle_results(counts: list, 
+                    ab_name: str,
+                    plot: bool = False) -> dict:
     """
     Generates the Negative Binomial results for 1, 2, and 3 component 
     mixture models. Plots the fit of each model on a histogram of the data
@@ -732,9 +819,7 @@ def _nb_mle_results(counts: list,
 
     Parameters:
         counts (list): raw counts from protein data
-        transform_type (str): type of transformation (optional)
         plot (bool): option to plot each model
-        plot_percentile (float): set plot range of graph based on percentile
 
     Returns:
         sorted_results (dict): all models and their parameters, sorted by
@@ -805,8 +890,7 @@ def _nb_mle_results(counts: list,
                                  key=lambda item: item[1]['aic']))
     if plot:
         plot_fits(counts=counts,
-                        fit_results=sorted_results,
-                        plot_percentile=plot_percentile,
-                        transformed=transformed)
+                  fit_results=sorted_results,
+                  ab_name=ab_name)
 
     return sorted_results
