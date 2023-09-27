@@ -50,9 +50,10 @@ def plot_UMAP(IPD,
             projections, x=0, y=1,
         )
         norm_plot.show()
+        return norm_plot
     elif IPD.raw_cell_labels is not None:
         if normalized:
-            raw_types = IPD.norm_cell_labels.iloc[:, 0].tolist()
+            raw_types = IPD.norm_cell_labels.iloc[:, 1].tolist()
             norm_plot = px.scatter(
                 projections, x=0, y=1,
                 color_discrete_sequence=px.colors.qualitative.Dark24,
@@ -60,9 +61,10 @@ def plot_UMAP(IPD,
                 labels={'color':'cell type'}
             )
             norm_plot.show()
+            return norm_plot
                 
         else:
-            raw_types = IPD.raw_cell_labels.iloc[:, 0].tolist()
+            raw_types = IPD.raw_cell_labels.iloc[:, 1].tolist()
             reg_plot = px.scatter(
                 projections, x=0, y=1,
                 color_discrete_sequence=px.colors.qualitative.Dark24,
@@ -70,3 +72,4 @@ def plot_UMAP(IPD,
                 labels={'color':'cell type'}
             )
             reg_plot.show()
+            return reg_plot
