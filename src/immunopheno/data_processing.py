@@ -306,11 +306,11 @@ def _classify_cells(fit_results: dict,
 
     return classified_cells
 
-def _classify_cells_df(fit_all_results: list, 
+def _classify_cells_df(fit_all_results: dict, 
                        protein_data: pd.DataFrame) -> pd.DataFrame:
     """
     Parameters:
-        fit_all_results (list): optimization results for all antibodies
+        fit_all_results (dict): optimization results for all antibodies
         protein_data (pd.DataFrame): count matrix containing antibodies x cells
     
     Returns:
@@ -327,10 +327,10 @@ def _classify_cells_df(fit_all_results: list,
 
     for index, ab in enumerate(protein_data):
         # Find background component
-        ab_background_comp_index = _find_background_comp(fit_all_results[index])
+        ab_background_comp_index = _find_background_comp(fit_all_results[ab])
 
         # Classify cells in vector as either background or signal
-        ab_classified_cells = _classify_cells(fit_all_results[index], 
+        ab_classified_cells = _classify_cells(fit_all_results[ab], 
                                               protein_data.loc[:, ab], 
                                               ab_background_comp_index)
 
@@ -474,7 +474,7 @@ def _z_scores(fit_results: dict,
     
     return z_scores
 
-def _z_scores_df(fit_all_results: list,
+def _z_scores_df(fit_all_results: dict,
                  protein_data: pd.DataFrame) -> pd.DataFrame:
     """
     Calculates the z scores for all cells for a set of antibodies. Further 
@@ -482,7 +482,7 @@ def _z_scores_df(fit_all_results: list,
     already excluded the cells that fell above an expression threshold.
 
     Parameters:
-        fit_all_results (list): optimization results for all antibodies
+        fit_all_results (dict): optimization results for all antibodies
         protein_data (pd.DataFrame): count matrix containing antibodies x cells
     
     Returns:
@@ -498,7 +498,7 @@ def _z_scores_df(fit_all_results: list,
 
     for index, ab in enumerate(protein_data):
         # Classify cells in vector as either background or signal
-        z_score_vector = _z_scores(fit_all_results[index], 
+        z_score_vector = _z_scores(fit_all_results[ab], 
                                   protein_data.loc[:, ab])
 
         z_score_matrix.append(z_score_vector)
@@ -926,7 +926,7 @@ def _normalize_antibody(fit_results: dict,
             return normalized_z_scores
 
 def _normalize_antibodies_df(protein_cleaned_filt_df: pd.DataFrame, 
-                             fit_all_results: list,
+                             fit_all_results: dict,
                              p_threshold: float = 0.05,
                              background_cell_z_score: int = -10,
                              classified_filt_df: pd.DataFrame = None, 
@@ -940,7 +940,7 @@ def _normalize_antibodies_df(protein_cleaned_filt_df: pd.DataFrame,
         protein_cleaned_filt_df (pd.DataFrame): containing all cells and
             antibodies, except those that have been filtered out based
             on level of expression
-        fit_all_results (list): list of dictionaries containing 
+        fit_all_results (dict): list of dictionaries containing 
             optimization results for each antibody
         p_threshold (float): threshold for p value rejection
         background_cell_z_score (int): z-score value for background cells
@@ -962,7 +962,7 @@ def _normalize_antibodies_df(protein_cleaned_filt_df: pd.DataFrame,
 
     for index, (ab_name, counts) in enumerate(protein_cleaned_filt_df.items()):
         norm_ab_counts = _normalize_antibody(
-                            fit_results=fit_all_results[index], 
+                            fit_results=fit_all_results[ab_name], 
                             data_vector=counts, 
                             ab_name=ab_name, 
                             p_threshold=p_threshold,
@@ -1041,15 +1041,13 @@ class ImmunoPhenoData:
                  protein_matrix: pd.DataFrame = None, 
                  gene_matrix: pd.DataFrame = None,
                  cell_labels: pd.DataFrame = None,
-                 label_certainties: pd.DataFrame = None,
-                 idAb_alias: pd.DataFrame = None):
+                 label_certainties: pd.DataFrame = None):
         
         # Raw values
         self._protein_matrix = protein_matrix
         self._gene_matrix = gene_matrix
         self._cell_labels = cell_labels
         self._label_certainties = label_certainties
-        self._idAb_alias = idAb_alias
 
         # Temp values (for resetting index)
         self._temp_protein = None
@@ -1155,11 +1153,73 @@ class ImmunoPhenoData:
         """
         # Before updating the index, reset it back to its original
         self.reset_index()
-        
+
         self._protein_matrix = self._protein_matrix.loc[index]
         self._gene_matrix = self._gene_matrix.loc[index]
         self._cell_labels = self._cell_labels.loc[index]
         self._label_certainties = self._label_certainties.loc[index]
+
+    def remove_antibody(self,
+                        antibody: str):
+        """
+        Removes an antibody from protein data and mixture model fits (if present)
+
+        Parameters:
+            antibody (str): name of antibody to be removed
+        
+        """
+        # CHECK: Does this antibody exist in the protein data?
+        if isinstance(antibody, str):
+            try:
+                # Drop column from protein data
+                self._protein_matrix.drop(antibody, axis=1, inplace=True)
+                print(f"Removed antibody: {antibody} from protein data.")  
+            except:
+                raise AntibodyLookupError(f"'{antibody}' not found in protein data.")
+        else:
+            raise AntibodyLookupError("Antibody must be a string")  
+
+        # CHECK: Does this antibody have a fit?
+        if self._all_fits_dict != None and antibody in self._all_fits_dict:
+            self._all_fits_dict.pop(antibody)
+            print(f"Removed antibody:{antibody} fits.")
+    
+    def select_mixture_model(self,
+                             antibody: str,
+                             mixture: int):
+        """
+        Overrides the best mixture model fit for an antibody
+
+        Parameters:
+            antibody (str): name of antibody to modify best mixture model fit
+            mixture (int): number of mixture components for a given fit to override
+
+        """
+        # CHECK: is mixture between 1 and 3
+        if (not 1 <= mixture <= 3):
+            raise BoundsThresholdError("Number for Mixture Model must lie between 1 and 3 (inclusive).")
+
+        # CHECK: Does this antibody have a fit?
+        if self._all_fits_dict != None and antibody in self._all_fits_dict:
+
+            # Find current ordering of mixture models for this antibody
+            # We know the element at index 0 is by default the "best" (sorted by lowest AIC)
+            mix_order_list = list(self._all_fits_dict[antibody].keys())
+
+            # Find the index of the element we CHOOSE to be the best
+            choice_index = mix_order_list.index(mixture)
+
+            # SWAP the ordering of these two elements in the list
+            mix_order_list[0], mix_order_list[choice_index] = mix_order_list[choice_index], mix_order_list[0]
+
+            # With this new list ordering, re-create the dictionary
+            reordered_dict = {k: self._all_fits_dict[antibody][k] for k in mix_order_list}
+
+            # Re-assign this dictionary to this antibody key
+            self._all_fits_dict[antibody] = reordered_dict
+        else:
+            # Else, we cannot find the antibody's fits
+            raise AntibodyLookupError(f"{antibody} fits cannot be found.")
 
     def fit_antibody(self,
                      input: list,
@@ -1310,7 +1370,7 @@ class ImmunoPhenoData:
         # Store in class
         self._all_fits = fit_all_results
 
-        return fit_all_results
+        return self._all_fits_dict
 
     def normalize_all_antibodies(self,
                                  p_threshold: float = 0.05,
@@ -1337,14 +1397,14 @@ class ImmunoPhenoData:
         if self._all_fits is None:
             raise EmptyAntibodyFitsError("No fits found for each antibody. Please "
                                          "call fit_all_antibodies() or fit_antibody() first.")
-        else:
-            all_fits = self._all_fits
         
         if None in self._all_fits_dict.values():
             raise IncompleteAntibodyFitsError("All antibodies must be fit before normalizing. "
                                               "call fit_all_antibodies() or fit_antibody() for "
                                               "each antibody.") 
         
+        all_fits = self._all_fits_dict
+
         if (not 0 <= p_threshold <= 1 or
             not 0 <= sig_expr_threshold <= 1 or
             not 0 <= bg_expr_threshold <= 1):
