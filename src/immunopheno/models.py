@@ -345,9 +345,12 @@ def plot_all_fits(IPD):
     if IPD._all_fits is None:
         raise Exception("No fits found. Call fit_all_antibodies first")
     
+    if len(IPD._all_fits_dict) == 0:
+        raise Exception("No fits found. Call fit_all_antibodies first")
+    
     for index, ab in enumerate(IPD.protein_cleaned):
         plot_fits(counts=IPD.protein_cleaned.loc[:, ab],
-                  fit_results=IPD._all_fits[index],
+                  fit_results=IPD._all_fits_dict[ab],
                   ab_name=ab)
 
 def _gmm_init_params(counts: list,
