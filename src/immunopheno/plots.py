@@ -49,7 +49,6 @@ def plot_UMAP(IPD,
         norm_plot = px.scatter(
             projections, x=0, y=1,
         )
-        norm_plot.show()
         return norm_plot
     elif IPD.raw_cell_labels is not None:
         if normalized:
@@ -60,7 +59,6 @@ def plot_UMAP(IPD,
                 color=[str(cell_type) for cell_type in raw_types],
                 labels={'color':'cell type'}
             )
-            norm_plot.show()
             return norm_plot
                 
         else:
@@ -71,5 +69,4 @@ def plot_UMAP(IPD,
                 color=[str(cell_type) for cell_type in raw_types],
                 labels={'color':'cell type'}
             )
-            reg_plot.show()
             return reg_plot
