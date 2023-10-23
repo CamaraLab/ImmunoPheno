@@ -1,15 +1,18 @@
 import numpy as np
+import scipy
 import scipy.stats as ss
 import statsmodels.api as sm
 import pandas as pd
 import statistics
 import warnings
 import logging
+import csv
+from importlib.resources import files
 
 from .models import _gmm_results, _nb_mle_results
 from sklearn.linear_model import LinearRegression
 
-def _clean_adt(protein_df: pd.DataFrame) -> pd.DataFrame:
+def _clean_adt(protein_filepath: str) -> pd.DataFrame:
     """
     Transposes the protein DataFrame
 
@@ -20,12 +23,75 @@ def _clean_adt(protein_df: pd.DataFrame) -> pd.DataFrame:
       protein_df_copy (Pandas DataFrame): transposed df
     """
 
-    protein_df_copy = protein_df.copy(deep=True)
-    protein_df_copy = protein_df_copy.T
-    
-    return protein_df_copy
+    # protein_df_copy = protein_df.copy(deep=True)
+    # protein_df_copy = protein_df_copy.T
+    protein_df = pd.read_csv(protein_filepath, sep=",", index_col=[0])
 
-def _clean_rna(gene_df: pd.DataFrame) -> pd.DataFrame:
+    return protein_df.T
+
+def _read_csv(file_path: str):
+    """
+    Reads in a (large) csv file using a parser. This
+    avoid having to load it into memory at once.
+
+    Parameters:
+        file_path (str): file path to csv file
+    
+    Returns:
+        row (generator object): generator containing rows in csv
+            as a list
+    """
+
+    with open(file_path, "r") as f:
+        reader = csv.reader(f)
+        for row in reader:
+            yield row
+
+def _umi_generator(file_path: str):
+    """
+    Reads in an RNA csv file and produces a generator containing
+    UMI counts for each cell as a list
+
+    Parameters: 
+        file_path (str): file path to csv file
+    
+    Returns:
+        row (generator object): generator containing UMI counts for
+            each gene, for a single cell. Stored as a list
+    """
+
+    # Retrieve list of genes used in SingleR
+    # We will filter out unused genes from the RNA dataset that are not in that list
+    hpca_genes_path = str(files('immunopheno.data').joinpath('hpca_genes.txt'))
+    hpca_genes = set(line.strip() for line in open(hpca_genes_path))
+
+    for row in _read_csv(file_path):
+        if row[0].lower() in hpca_genes:
+            yield [int(x) for x in row[1:]]
+
+def _gene_name_generator(file_path: str):
+    """
+    Reads in an RNA csv file and produces a generator containing
+    gene names for each cell as a list
+
+    Parameters:
+        file_path (str): file path to csv file
+    
+    Returns:
+        row (generator object): generator containing all genes
+            for a single cell. Stored as a list
+    """
+
+    # Retrieve list of genes used in SingleR
+    # We will filter out unused genes from the RNA dataset that are not in that list
+    hpca_genes_path = str(files('immunopheno.data').joinpath('hpca_genes.txt'))
+    hpca_genes = set(line.strip() for line in open(hpca_genes_path))
+
+    for row in _read_csv(file_path):
+        if row[0].lower() in hpca_genes:
+            yield row[0]
+
+def _clean_rna(gene_filepath: str) -> pd.DataFrame:
     """
     Transposes the RNA DataFrame of UMIs containing features (genes) and cells
 
@@ -36,10 +102,25 @@ def _clean_rna(gene_df: pd.DataFrame) -> pd.DataFrame:
         gene_df_copy_transposed (Pandas DataFrame): transposed RNA DataFrame
     """
 
-    gene_df_copy = gene_df.copy(deep=True)
-    gene_df_copy_transposed = gene_df_copy.T
+    rna_data = _read_csv(gene_filepath)
+    cell_columns = [next(rna_data, None) for _ in range(1)][0][1:]
 
-    return gene_df_copy_transposed
+    # Create a generator to get all gene names
+    gene_rows = _gene_name_generator(gene_filepath)
+
+    # Create a generator to get all umi counts for each cell
+    umi_columns = _umi_generator(gene_filepath)
+
+    # Create scipy sparse csr matrix using UMI data
+    sparse_umi = scipy.sparse.csr_matrix(list(umi_columns))
+
+    # Create a dataframe with the RNA data
+    # We will transpose the matrix (due to speed over a dataframe)
+    rna_df = pd.DataFrame.sparse.from_spmatrix(sparse_umi.T,
+                                               index=cell_columns,
+                                               columns=list(gene_rows))
+    
+    return rna_df
 
 def _clean_labels(cell_label_df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -62,6 +143,56 @@ def _clean_labels(cell_label_df: pd.DataFrame) -> pd.DataFrame:
                                 inplace=True)
     
     return cell_label_modified
+
+def _read_antibodies(csv_file: str) -> list:
+    """
+    Parses a spreadsheet containing antibody IDs 
+
+    Parameters:
+        csv_file (str): name of csv file containing antibody names
+    
+    Returns:
+        antibodies (list): list of antibody ids (ex: AB_XXXXXXX)
+    """
+    antibodies = []
+
+    with open(csv_file, 'r') as csv_file:
+        lines = csv_file.readlines()
+        num_lines = len(lines)
+        ab_index = (lines.index('Antibody table:,\n') + 1)
+        
+        while ab_index < num_lines:
+            ab = lines[ab_index].strip().split(",", maxsplit=1)
+            ab_name_strip = ab[0].strip()
+            ab_id_strip = ab[1].strip()
+            antibodies.append([ab_name_strip, ab_id_strip])
+            ab_index += 1
+    
+    return antibodies
+
+def _filter_antibodies(protein_matrix: pd.DataFrame,
+                       csv_file: str) -> pd.DataFrame:
+    """
+    Filters ADT protein table using only antibodies found in 
+    a user-provided spreadsheet
+    
+    Parameters:
+        protein_matrix (pd.DataFrame): protein data 
+        csv_file (str): file path to provided spreadsheet
+    
+    Returns:
+        filt_df (pd.DataFrame): dataframe containing rows
+            that reflect antibodies listed in the spreadsheet
+    """
+    
+    antibody_pairs = _read_antibodies(csv_file)
+    antibodies_list = [ab[0] for ab in antibody_pairs]
+
+    
+    # Subset the columns that are in our spreadsheet
+    filt_df = protein_matrix.loc[antibodies_list]
+    
+    return filt_df.T
 
 def _log_transform(d_vect: list,
                   scale: (int) = 1) -> list:
@@ -1032,22 +1163,24 @@ class ImmunoPhenoData:
     normalization to antibodies present in a protein dataset. 
 
     Parameters:
-        protein_matrix (pd.DataFrame): ADT count matrix with cell x antibodies
-        gene_matrix (pd.DataFrame): UMI count matrix with cell x genes
+        protein_matrix (str): ADT count matrix with cell x antibodies
+        gene_matrix (str): UMI count matrix with cell x genes
         cell_labels (pd.DataFrame): matrix with cell x cell type (ex: Cell Ontologies)
-        label_certainties (pd.DataFrame): matrix with cell x delta.next (certainity)
+        spreadsheet (str): name of csv file containing a spreadsheet with
+            information about the experiment and antibodies
     """
     def __init__(self, 
-                 protein_matrix: pd.DataFrame = None, 
-                 gene_matrix: pd.DataFrame = None,
+                 protein_matrix: str = None, 
+                 gene_matrix: str = None,
                  cell_labels: pd.DataFrame = None,
-                 label_certainties: pd.DataFrame = None):
+                 spreadsheet: str = None):
         
         # Raw values
         self._protein_matrix = protein_matrix
         self._gene_matrix = gene_matrix
         self._cell_labels = cell_labels
-        self._label_certainties = label_certainties
+        self._spreadsheet = spreadsheet
+        self._label_certainties = None
 
         # Temp values (for resetting index)
         self._temp_protein = None
@@ -1076,10 +1209,11 @@ class ImmunoPhenoData:
         # Single cell
         if self._protein_matrix is not None and self._gene_matrix is not None:
             self._protein_matrix = _clean_adt(self._protein_matrix)
-            self._temp_protein = _clean_adt(protein_matrix)
+            self._temp_protein = self._protein_matrix.copy(deep=True)
 
             self._gene_matrix = _clean_rna(self._gene_matrix)
-            self._temp_gene = _clean_rna(gene_matrix)
+            self._temp_gene = self._gene_matrix.copy(deep=True)
+
         # Flow
         elif self._protein_matrix is not None and self._gene_matrix is None:
             self._protein_matrix = self._protein_matrix
@@ -1088,9 +1222,13 @@ class ImmunoPhenoData:
         # If dealing with single cell data
         if self._cell_labels is not None:
             self._cell_labels = _clean_labels(self._cell_labels)
-            self._temp_labels = _clean_labels(cell_labels)
+            self._temp_labels = self._cell_labels.copy(deep=True)
         else:
             cell_labels = None
+
+        # If filtering antibodies using a provided spreadsheet
+        if spreadsheet is not None:
+            self._protein_matrix = _filter_antibodies(self._protein_matrix.T, spreadsheet)
     
     @property
     def classified_filt(self):
@@ -1108,7 +1246,7 @@ class ImmunoPhenoData:
     def protein_cleaned(self):
         return self._protein_matrix
 
-    @property
+    @property 
     def gene_cleaned(self):
         return self._gene_matrix
 
