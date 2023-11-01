@@ -22,6 +22,9 @@ dependencies = [
     "plotly==5.13.1",
     "pytest-cov==4.0.0",
     "pytest-mock==3.10.0",
+    "multiprocess==0.70.15",
+    "anndata==0.10.0",
+    "tqdm"
 	]
 
 [tool.pytest.ini_options]
