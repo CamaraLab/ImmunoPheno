@@ -19,7 +19,7 @@ def plot_antibody_correlation(IPD):
     corr_df = _correlation_ab(IPD.classified_filt, IPD.z_scores)
     g = sns.clustermap(corr_df, vmin=-1, vmax=1, cmap='BrBG')
     g.ax_cbar.set_position((1, .2, .03, .4))
-
+ 
 def plot_UMAP(IPD,
               normalized: bool = False):
     """ 
@@ -43,7 +43,7 @@ def plot_UMAP(IPD,
             raise PlotUMAPError("Cannot plot normalized UMAP. "
                             "normalize_all_antibodies() must be called first.")
     else:
-        projections = umap_plot.fit_transform(IPD.protein_cleaned)
+        projections = umap_plot.fit_transform(IPD.protein)
     
     if IPD.raw_cell_labels is None:
         norm_plot = px.scatter(
