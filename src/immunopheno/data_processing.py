@@ -7,7 +7,11 @@ import statistics
 import warnings
 import logging
 import csv
+import multiprocessing
+import multiprocess
+import anndata
 from importlib.resources import files
+from tqdm.autonotebook import tqdm
 
 from .models import _gmm_results, _nb_mle_results
 from sklearn.linear_model import LinearRegression
@@ -23,50 +27,91 @@ def _clean_adt(protein_filepath: str) -> pd.DataFrame:
       protein_df_copy (Pandas DataFrame): transposed df
     """
 
-    # protein_df_copy = protein_df.copy(deep=True)
-    # protein_df_copy = protein_df_copy.T
-    protein_df = pd.read_csv(protein_filepath, sep=",", index_col=[0])
+    protein_df = pd.read_csv(protein_filepath, sep=",", index_col=[0]).T
 
-    return protein_df.T
+    return protein_df
 
-def _read_csv(file_path: str):
+def _generate_range(size: int, 
+                   interval_size: int = 2000,
+                   start: int = 0) -> list:
+    """
+    Splits a range of numbers into partitions based on a
+    provided interval size. Partitions will only contain
+    the begin and end of a range. Ex: [[0, 10], [10, 20]]
+    
+    Parameters:
+        size (int): total size of the range
+        interval_size (int): desired partition sizes 
+        start (int): index to begin partitioning the range
+    
+    Returns:
+        start_stop_ranges (list): list of lists, containing
+            the start and end of a partition.
+            ex: [[0, 20], [20, 40], [40, 60]]
+    """
+    
+    if interval_size <= 1:
+        raise ValueError("Chunk or partition size must be greater than 1.")
+    
+    iterable_range = [i for i in range(size + 1)]
+
+    end = max(iterable_range)
+    step = interval_size
+    
+    start_stop_ranges = []
+    
+    for i in range(start, end, step): 
+        x = i 
+        start_stop_ranges.append([iterable_range[x:x+step][0], 
+                                  iterable_range[x:x+step+1][-1]])
+    
+    return start_stop_ranges
+
+def _read_csv(file_path: str, chunk_range=None):
     """
     Reads in a (large) csv file using a parser. This
-    avoid having to load it into memory at once.
+    avoid having to load it into memory all at once.
 
     Parameters:
         file_path (str): file path to csv file
-    
+        chunk_range (list): specific rows to parse 
+        
     Returns:
-        row (generator object): generator containing rows in csv
-            as a list
+        row (generator object): generator containing all/specific
+        rows in csv as a list
     """
-
+    
+    if chunk_range is not None:
+    # Use set for O(1) average lookup
+        row_indices = set(range(chunk_range[0], chunk_range[1]))
+        
     with open(file_path, "r") as f:
         reader = csv.reader(f)
-        for row in reader:
-            yield row
+        
+        if chunk_range is not None:
+            for i, line in enumerate(reader):
+                if i in row_indices:   
+                    yield (line)
+        else:
+            for row in reader: 
+                yield row
 
-def _umi_generator(file_path: str):
+def _umi_generator(file_path: str, chunk_range=None):
     """
     Reads in an RNA csv file and produces a generator containing
     UMI counts for each cell as a list
 
-    Parameters: 
+    Parameters:
         file_path (str): file path to csv file
+        chunk_range (list): specific rows to parse 
     
     Returns:
         row (generator object): generator containing UMI counts for
             each gene, for a single cell. Stored as a list
     """
 
-    # Retrieve list of genes used in SingleR
-    # We will filter out unused genes from the RNA dataset that are not in that list
-    hpca_genes_path = str(files('immunopheno.data').joinpath('hpca_genes.txt'))
-    hpca_genes = set(line.strip() for line in open(hpca_genes_path))
-
-    for row in _read_csv(file_path):
-        if row[0].lower() in hpca_genes:
+    for row in _read_csv(file_path, chunk_range):
+        if row[0].lower() != "":
             yield [int(x) for x in row[1:]]
 
 def _gene_name_generator(file_path: str):
@@ -82,67 +127,147 @@ def _gene_name_generator(file_path: str):
             for a single cell. Stored as a list
     """
 
+    for row in _read_csv(file_path):
+        if row[0].lower() != "":
+            yield row[0]
+
+def _clean_chunks(chunk_list: list) -> list:
+    """
+    Merges any chunks in a list that only contain one element with 
+    the previous chunk. This is because SingleR requires at least 
+    two cells at once to run. This may also reduce overhead by
+    reducing the number of processes to allocate.
+    
+    Parameters:
+        chunk_list (list): list of lists containing start and end values
+        
+    Returns:
+        chunk_list (list): updated list of lists without any lists
+            that contain a single element
+    """
+    final_chunk = chunk_list[-1]
+    size_final_chunk = final_chunk[1] - final_chunk[0]
+    
+    if size_final_chunk == 1:
+        # Update the second to last chunk with the last chunk
+        # "Merge" by adding the last chunk to the second to last chunk
+        # and delete the last chunk
+        chunk_list[-2][1] = chunk_list[-2][1] + 1
+        chunk_list.pop()
+        
+    return chunk_list
+
+def _load_rna_parallel(gene_filepath: str) -> pd.DataFrame:
+    """
+    Loads in a large RNA csv file using parallelized batch processing.
+    
+    Large RNA dataframes will be divided into large 'chunks', which 
+    are divided into smaller 'partitions'.
+    
+    Chunks will be evaluated sequentially, while partitions inside a chunk
+    will be evaluated in parallel as smaller pandas DataFrames.
+    
+    Partitions will be concatenated together at the end to create a 
+    sparse pandas DataFrame.
+    
+    Parameters:
+        gene_filepath (str): csv file path with rows (genes) x columns (cells)
+        
+    Returns:
+        results_df (pd.DataFrame): sparse DataFrame with rows (cells) x columns (genes)
+    """
+    
+    # Create a generator to get all the column names
+    rna_data = _read_csv(gene_filepath)
+    cell_columns = [next(rna_data, None) for _ in range(1)][0][1:]
+    
+    # Create a generator to get all gene names
+    gene_rows = _gene_name_generator(gene_filepath)
+    list_gene_rows = list(gene_rows)
+    
+    # Default chunk size will be num genes // 2
+    chunk_size = len(list_gene_rows) // 2
+    
+    # Default partition size will be chunk_size // 3
+    partition_size = chunk_size // 3
+
+    # Generate all the ranges for genes in the dataset
+    gene_ranges = _clean_chunks(_generate_range(len(list_gene_rows) + 1, 
+                                               start=0, 
+                                               interval_size=chunk_size))
+    
+    dataframe_chunks = []
+    
+    def process_section(chunk):
+        umi_chunk = _umi_generator(gene_filepath, chunk)
+        umi_chunk_df = pd.DataFrame.sparse.from_spmatrix(scipy.sparse.csr_matrix(list(umi_chunk)))
+        return umi_chunk_df.T # less expensive to transpose here compare to the end
+        
+    for chunk in gene_ranges:
+        partition_ranges = _clean_chunks(_generate_range(chunk[1], 
+                                                       interval_size=partition_size, 
+                                                       start=chunk[0]))
+        # Create a multiprocessing pool
+        with multiprocess.Pool(processes=multiprocessing.cpu_count()) as pool:
+            results = pool.map(process_section, partition_ranges)
+
+        for rna_df in results:
+            dataframe_chunks.append(rna_df)
+    
+    # Combine all DataFrames
+    results_df = pd.concat(dataframe_chunks, ignore_index=True, axis=1)
+    
+    # Add in Index and Columns
+    cell_index = pd.Index(cell_columns)
+    results_df.set_index(cell_index, inplace=True)
+    results_df.columns = list_gene_rows
+    
+    return results_df
+
+def _clean_rna(gene_filepath: str) -> pd.DataFrame:
+    """
+    Loads in RNA data from a CSV to a pandas DataFrame
+    
+    Parameters:
+        gene_filepath (str): csv file path with rows (genes) x columns (cells)
+    
+    Returns:
+        rna_df (pd.DataFrame): RNA dataframe with rows (cells) x columns (genes)
+    """
+    
+    # If the number of cells is <= 20k, we can use pandas directly to load
+    # Create a generator to get all the column names
+    rna_data = _read_csv(gene_filepath)
+    cell_columns = [next(rna_data, None) for _ in range(1)][0][1:]
+    
+    if len(cell_columns) <= 20000:
+        rna_df = pd.read_csv(gene_filepath, sep=",", index_col=[0]).T
+    
+    # Otherwise, load in parallel
+    else:
+        rna_df = _load_rna_parallel(gene_filepath)
+    
+    return rna_df
+
+def _singleR_rna(rna: pd.DataFrame) -> pd.DataFrame:
+    """
+    Filters out genes (columns) that are used when
+    running SingleR
+    
+    Parameters:
+        rna (pd.DataFrame): RNA dataframe
+        
+    Returns:
+        Pandas dataframe with columns only found in the
+        Human Primary Cell Atlas (SingleR) 
+    """
+    
     # Retrieve list of genes used in SingleR
     # We will filter out unused genes from the RNA dataset that are not in that list
     hpca_genes_path = str(files('immunopheno.data').joinpath('hpca_genes.txt'))
     hpca_genes = set(line.strip() for line in open(hpca_genes_path))
-
-    for row in _read_csv(file_path):
-        if row[0].lower() in hpca_genes:
-            yield row[0]
-
-def _clean_rna(gene_filepath: str) -> pd.DataFrame:
-    """
-    Transposes the RNA DataFrame of UMIs containing features (genes) and cells
-
-    Parameters:
-        gene_df (Pandas DataFrame): RNA data, rows = features, cols = cells
-
-    Returns:
-        gene_df_copy_transposed (Pandas DataFrame): transposed RNA DataFrame
-    """
-
-    rna_data = _read_csv(gene_filepath)
-    cell_columns = [next(rna_data, None) for _ in range(1)][0][1:]
-
-    # Create a generator to get all gene names
-    gene_rows = _gene_name_generator(gene_filepath)
-
-    # Create a generator to get all umi counts for each cell
-    umi_columns = _umi_generator(gene_filepath)
-
-    # Create scipy sparse csr matrix using UMI data
-    sparse_umi = scipy.sparse.csr_matrix(list(umi_columns))
-
-    # Create a dataframe with the RNA data
-    # We will transpose the matrix (due to speed over a dataframe)
-    rna_df = pd.DataFrame.sparse.from_spmatrix(sparse_umi.T,
-                                               index=cell_columns,
-                                               columns=list(gene_rows))
     
-    return rna_df
-
-def _clean_labels(cell_label_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Shifts the first column (cell names) to become the index.
-    Remaining column will contain the cell types.
-
-    Parameters:
-        cell_label_df (Pandas DataFrame): cell types, rows = cells, cols = types
-    
-    Returns:
-        cell_label_modified (Pandas DataFrame): cell types with only one column
-    """
-
-    cell_label_modified = cell_label_df.copy(deep=True)
-    # Shift the first column to be the index
-    cell_label_modified.index = cell_label_modified.iloc[:, 0]
-    # Drop first column
-    cell_label_modified.drop(columns=cell_label_df.columns[0],
-                                axis=1,
-                                inplace=True)
-    
-    return cell_label_modified
+    return rna.loc[:, rna.columns.isin([x.upper() for x in hpca_genes])]
 
 def _read_antibodies(csv_file: str) -> list:
     """
@@ -188,11 +313,32 @@ def _filter_antibodies(protein_matrix: pd.DataFrame,
     antibody_pairs = _read_antibodies(csv_file)
     antibodies_list = [ab[0] for ab in antibody_pairs]
 
-    
     # Subset the columns that are in our spreadsheet
     filt_df = protein_matrix.loc[antibodies_list]
     
     return filt_df.T
+
+def _clean_labels(cell_label_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Shifts the first column (cell names) to become the index.
+    Remaining column will contain the cell types.
+
+    Parameters:
+        cell_label_df (Pandas DataFrame): cell types, rows = cells, cols = types
+    
+    Returns:
+        cell_label_modified (Pandas DataFrame): cell types with only one column
+    """
+
+    cell_label_modified = cell_label_df.copy(deep=True)
+    # Shift the first column to be the index
+    cell_label_modified.index = cell_label_modified.iloc[:, 0]
+    # Drop first column
+    cell_label_modified.drop(columns=cell_label_df.columns[0],
+                                axis=1,
+                                inplace=True)
+    
+    return cell_label_modified
 
 def _log_transform(d_vect: list,
                   scale: (int) = 1) -> list:
@@ -325,7 +471,7 @@ def _classify_cells(fit_results: dict,
         component_list.remove(bg_comp)
 
         # comp1 will be the background component
-        comp1_probs = ss.nbinom.pmf(range(max(data_vector) + 1), 
+        comp1_probs = ss.nbinom.pmf(range(int(max(data_vector)) + 1), 
                                     bg_n, 
                                     bg_p)
 
@@ -334,22 +480,25 @@ def _classify_cells(fit_results: dict,
 
         if best_num_mix == 3:
             comp2_index = component_list.pop(0)
-            comp2_probs = ss.nbinom.pmf(range(max(data_vector) + 1),
+            comp2_probs = ss.nbinom.pmf(range(int(max(data_vector)) + 1),
                                         n_params[comp2_index], 
                                         p_params[comp2_index])
 
             comp3_index = component_list.pop(0)
-            comp3_probs = ss.nbinom.pmf(range(max(data_vector) + 1), 
+            comp3_probs = ss.nbinom.pmf(range(int(max(data_vector)) + 1), 
                                         n_params[comp3_index], 
                                         p_params[comp3_index])
         elif best_num_mix == 2:
             comp2_index = component_list.pop(0)
-            comp2_probs = ss.nbinom.pmf(range(max(data_vector) + 1), 
+            comp2_probs = ss.nbinom.pmf(range(int(max(data_vector)) + 1), 
                                         n_params[comp2_index], 
                                         p_params[comp2_index])
         
         # Iterate over each cell value for an antibody
         for cell in data_vector:
+            # Convert to int
+            cell = int(cell)
+
             if best_num_mix == 3:
                 comp1_cell_prob = comp1_probs[cell]
                 comp2_cell_prob = comp2_probs[cell] + (0.5 - epsilon)
@@ -402,6 +551,9 @@ def _classify_cells(fit_results: dict,
             
         # Iterate over each cell value for an antibody
         for cell in data_vector:
+            # Convert to int 
+            cell = int(cell)
+
             if best_num_mix == 3:
                 comp1_cell_prob = ss.norm.pdf(cell,
                                               bg_mean,
@@ -1091,7 +1243,7 @@ def _normalize_antibodies_df(protein_cleaned_filt_df: pd.DataFrame,
 
     normalized_list = []
 
-    for index, (ab_name, counts) in enumerate(protein_cleaned_filt_df.items()):
+    for ab_name, counts in tqdm(protein_cleaned_filt_df.items(), total=len(protein_cleaned_filt_df.columns)):
         norm_ab_counts = _normalize_antibody(
                             fit_results=fit_all_results[ab_name], 
                             data_vector=counts, 
@@ -1163,24 +1315,27 @@ class ImmunoPhenoData:
     normalization to antibodies present in a protein dataset. 
 
     Parameters:
-        protein_matrix (str): ADT count matrix with cell x antibodies
-        gene_matrix (str): UMI count matrix with cell x genes
-        cell_labels (pd.DataFrame): matrix with cell x cell type (ex: Cell Ontologies)
+        protein_matrix (str): file path to ADT count matrix with row (antibodies) x column (cells)
+        gene_matrix (str): file path to UMI count matrix with row (genes) x column (cells)
         spreadsheet (str): name of csv file containing a spreadsheet with
             information about the experiment and antibodies
+        scanpy (AnnData object): scanpy anndata object used to load in protein and gene data
+        cell_labels (pd.DataFrame): matrix with cell x cell type (ex: Cell Ontologies)
     """
     def __init__(self, 
                  protein_matrix: str = None, 
                  gene_matrix: str = None,
-                 cell_labels: pd.DataFrame = None,
-                 spreadsheet: str = None):
+                 spreadsheet: str = None,
+                 scanpy: anndata.AnnData = None,
+                 cell_labels: pd.DataFrame = None):
         
         # Raw values
         self._protein_matrix = protein_matrix
         self._gene_matrix = gene_matrix
-        self._cell_labels = cell_labels
         self._spreadsheet = spreadsheet
+        self._cell_labels = cell_labels
         self._label_certainties = None
+        self._scanpy = scanpy
 
         # Temp values (for resetting index)
         self._temp_protein = None
@@ -1196,26 +1351,42 @@ class ImmunoPhenoData:
         self._cell_labels_filt_df = None
         self._linear_reg_df = None
         self._z_scores_df = None
+        self._singleR_rna = None
 
-        if protein_matrix is None:
-            raise LoadMatrixError("protein_matrix must be provided")
+        # If loading in a scanpy object
+        if scanpy is not None:
+            # Extract and load protein data
+            protein_anndata = scanpy[:, scanpy.var["feature_types"] == "Antibody Capture"].copy()
+            self._protein_matrix = protein_anndata.to_df(layer="counts")
+
+            # Extract and load rna/gene data
+            rna_anndata = scanpy[:, scanpy.var["feature_types"] == "Gene Expression"].copy()
+            self._gene_matrix = rna_anndata.to_df(layer="counts")
+
+            # Filter out rna based on genes used for SingleR
+            self._singleR_rna = _singleR_rna(self._gene_matrix)
+
+        if protein_matrix is None and scanpy is None:
+            raise LoadMatrixError("protein_matrix file path must be provided")
 
         if (protein_matrix is not None and 
             cell_labels is not None and 
-            gene_matrix is None):
-            raise LoadMatrixError("gene_matrix must be present along with "
+            gene_matrix is None and
+            scanpy is None):
+            raise LoadMatrixError("gene_matrix file path must be present along with "
                                   "cell_labels")
         
         # Single cell
-        if self._protein_matrix is not None and self._gene_matrix is not None:
+        if self._protein_matrix is not None and self._gene_matrix is not None and scanpy is None:
             self._protein_matrix = _clean_adt(self._protein_matrix)
             self._temp_protein = self._protein_matrix.copy(deep=True)
 
             self._gene_matrix = _clean_rna(self._gene_matrix)
+            self._singleR_rna = _singleR_rna(self._gene_matrix)
             self._temp_gene = self._gene_matrix.copy(deep=True)
 
         # Flow
-        elif self._protein_matrix is not None and self._gene_matrix is None:
+        elif self._protein_matrix is not None and self._gene_matrix is None and scanpy is None:
             self._protein_matrix = self._protein_matrix
             self._gene_matrix = None
 
@@ -1243,11 +1414,11 @@ class ImmunoPhenoData:
         return self._normalized_counts_df
     
     @property
-    def protein_cleaned(self):
+    def protein(self):
         return self._protein_matrix
 
     @property 
-    def gene_cleaned(self):
+    def rna(self):
         return self._gene_matrix
 
     @property
@@ -1311,7 +1482,7 @@ class ImmunoPhenoData:
             try:
                 # Drop column from protein data
                 self._protein_matrix.drop(antibody, axis=1, inplace=True)
-                print(f"Removed antibody: {antibody} from protein data.")  
+                print(f"Removed {antibody} from protein data.")  
             except:
                 raise AntibodyLookupError(f"'{antibody}' not found in protein data.")
         else:
@@ -1320,7 +1491,7 @@ class ImmunoPhenoData:
         # CHECK: Does this antibody have a fit?
         if self._all_fits_dict != None and antibody in self._all_fits_dict:
             self._all_fits_dict.pop(antibody)
-            print(f"Removed antibody:{antibody} fits.")
+            print(f"Removed {antibody} fits.")
     
     def select_mixture_model(self,
                              antibody: str,
@@ -1492,16 +1663,16 @@ class ImmunoPhenoData:
 
         fit_all_results = []
 
-        for ab in self._protein_matrix:
+        for ab in tqdm(self._protein_matrix, total=len(self._protein_matrix.columns)):
             # if plot: # Print antibody name if plotting
                 # print("Antibody:", ab)
             fits = self.fit_antibody(input=self._protein_matrix.loc[:, ab], 
-                                     ab_name=ab,
-                                     transform_type=transform_type,
-                                     transform_scale=transform_scale, 
-                                     model=model,
-                                     plot=plot,
-                                     **kwargs)
+                                    ab_name=ab,
+                                    transform_type=transform_type,
+                                    transform_scale=transform_scale, 
+                                    model=model,
+                                    plot=plot,
+                                    **kwargs)
             self._all_fits_dict[ab] = fits
             fit_all_results.append(fits)
 
