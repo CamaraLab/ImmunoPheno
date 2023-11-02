@@ -75,7 +75,8 @@ def plot_fits(counts:list,
         containing the individual components of each model
     """
     
-    countsMax = max(counts)
+    # Convert to int
+    countsMax = int(max(counts))
     
     # Make initial subplots 
     fig = make_subplots(rows=1, 
@@ -348,8 +349,8 @@ def plot_all_fits(IPD):
     if len(IPD._all_fits_dict) == 0:
         raise Exception("No fits found. Call fit_all_antibodies first")
     
-    for index, ab in enumerate(IPD.protein_cleaned):
-        plot_fits(counts=IPD.protein_cleaned.loc[:, ab],
+    for index, ab in enumerate(IPD.protein):
+        plot_fits(counts=IPD.protein.loc[:, ab],
                   fit_results=IPD._all_fits_dict[ab],
                   ab_name=ab)
 

@@ -1357,11 +1357,15 @@ class ImmunoPhenoData:
         if scanpy is not None:
             # Extract and load protein data
             protein_anndata = scanpy[:, scanpy.var["feature_types"] == "Antibody Capture"].copy()
-            self._protein_matrix = protein_anndata.to_df(layer="counts")
+            protein_df = protein_anndata.to_df(layer="counts")
+            self._protein_matrix = protein_df.copy(deep=True)
+            self._temp_protein = self._protein_matrix.copy(deep=True)
 
             # Extract and load rna/gene data
             rna_anndata = scanpy[:, scanpy.var["feature_types"] == "Gene Expression"].copy()
-            self._gene_matrix = rna_anndata.to_df(layer="counts")
+            gene_df = rna_anndata.to_df(layer="counts")
+            self._gene_matrix = gene_df.copy(deep=True)
+            self._temp_gene = self._gene_matrix.copy(deep=True)
 
             # Filter out rna based on genes used for SingleR
             self._singleR_rna = _singleR_rna(self._gene_matrix)
