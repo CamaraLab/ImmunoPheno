@@ -40,7 +40,7 @@ def test_plot_UMAP(mocker):
 
     # Mock Flow Cytometry with no labels
     mock_raw_IPD = mocker.MagicMock()
-    mock_raw_IPD.protein_cleaned = pd.DataFrame(data=[1, 2, 3])
+    mock_raw_IPD.protein = pd.DataFrame(data=[1, 2, 3])
     mock_norm_IPD.raw_cell_labels = None
 
     # Mock Exception

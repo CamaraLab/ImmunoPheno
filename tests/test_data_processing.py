@@ -682,7 +682,7 @@ def test_property_ImmunoPhenoData():
     output_classified = ipd.classified_filt
     output_z_scores = ipd.z_scores
     output_norm_counts = ipd.normalized_counts
-    output_protein = ipd.protein_cleaned
+    output_protein = ipd.protein
     output_norm_labels = ipd.norm_cell_labels
     output_raw_labels = ipd.raw_cell_labels
 
