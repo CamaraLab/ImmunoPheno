@@ -1391,7 +1391,8 @@ class ImmunoPhenoData:
 
         # Flow
         elif self._protein_matrix is not None and self._gene_matrix is None and scanpy is None:
-            self._protein_matrix = self._protein_matrix
+            self._protein_matrix = _clean_adt(self._protein_matrix)
+            self._temp_protein = self._protein_matrix.copy(deep=True)
             self._gene_matrix = None
 
         # If dealing with single cell data
@@ -1404,6 +1405,7 @@ class ImmunoPhenoData:
         # If filtering antibodies using a provided spreadsheet
         if spreadsheet is not None:
             self._protein_matrix = _filter_antibodies(self._protein_matrix.T, spreadsheet)
+            self._temp_protein = self._protein_matrix.copy(deep=True)
     
     @property
     def classified_filt(self):
