@@ -267,7 +267,8 @@ def _singleR_rna(rna: pd.DataFrame) -> pd.DataFrame:
     hpca_genes_path = str(files('immunopheno.data').joinpath('hpca_genes.txt'))
     hpca_genes = set(line.strip() for line in open(hpca_genes_path))
     
-    return rna.loc[:, rna.columns.isin([x.upper() for x in hpca_genes])]
+    rna_column_genes = pd.Index([x.upper() for x in rna.columns])
+    return rna.loc[:, rna_column_genes.isin([x.upper() for x in hpca_genes])]
 
 def _read_antibodies(csv_file: str) -> list:
     """
