@@ -10,4 +10,7 @@ pytest-cov==4.0.0
 pytest-mock==3.10.0
 multiprocess==0.70.15
 anndata==0.10.0
+networkx==3.1
+nxontology==0.5.0
+netgraph==4.12.11
 tqdm
