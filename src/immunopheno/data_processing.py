@@ -353,7 +353,8 @@ def _log_transform(d_vect: list,
     Returns:
         data_array: log-transformed counts
     """
-    data_array = np.array([scale*i + 1 - (scale*min(d_vect)) for i in d_vect])
+    min_vect = min(d_vect)
+    data_array = np.array([scale*i + 1 - (scale*min_vect) for i in d_vect])
     return np.log(data_array)
 
 def _arcsinh_transform(d_vect: list,
@@ -368,7 +369,8 @@ def _arcsinh_transform(d_vect: list,
     Returns:
         data_array: arcsinh-transformed counts
     """
-    data_array = np.array([scale*i - (scale*min(d_vect)) for i in d_vect])
+    min_vect = min(d_vect)
+    data_array = np.array([scale*i + 1 - (scale*min_vect) for i in d_vect])
     return np.arcsinh(data_array.astype(float))
 
 def _conv_np_mode(n: float,
@@ -1264,6 +1266,11 @@ def _normalize_antibodies_df(protein_cleaned_filt_df: pd.DataFrame,
     
     # Transpose so the correct row/column labels are put
     normalized_df_transpose = normalized_df.T
+
+    if background_cell_z_score < 0:
+        normalized_df_transpose = normalized_df_transpose - background_cell_z_score
+    else:
+        normalized_df_transpose = normalized_df_transpose + background_cell_z_score
 
     return normalized_df_transpose
 
