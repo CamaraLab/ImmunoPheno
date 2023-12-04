@@ -305,6 +305,13 @@ class ImmunoPhenoDB_Connect:
             # Change x axis to use common antibody names
             ab_targets = list(res_df['target'])
             mapping_dict = dict(zip(res_df.index, ab_targets))
+
+            modified_mapping_dict = {}
+                
+            # Add antibody IDs next to their targets in the X-axis
+            for i in mapping_dict:
+                modified_mapping_dict[i] = str(i) + f" ({mapping_dict[i]})"
+            new_ab_targets = list(modified_mapping_dict.values())
             
             # Plot using plotly
             for idCL, df in idCL_plots.items():
@@ -312,7 +319,7 @@ class ImmunoPhenoDB_Connect:
                 idCL_readable = convert_idCL_readable(idCL)
                 
                 # Rename antibodies to common name
-                df['ab_target'] = df['idAntibody'].map(mapping_dict)
+                df['ab_target'] = df['idAntibody'].map(modified_mapping_dict)
                                 
                 # Rename normValue to z score
                 df.rename(columns={'normValue': 'z score'}, inplace=True)
@@ -322,12 +329,15 @@ class ImmunoPhenoDB_Connect:
                                 x = 'ab_target', 
                                 y = 'z score', 
                                 color = 'ab_target', 
-                                category_orders={'ab_target' : ab_targets}, # reorganize based on result df
+                                category_orders={'ab_target' : new_ab_targets},
                                 box=True)
                 fig.update_layout(title_text=f"Antibodies for: {idCL_readable}", 
                                   title_x = 0.45, 
                                   font=dict(size=8), 
-                                  width=1800, height=600)
+                                  width=1400, 
+                                  height=600)
+                fig.update_traces(width=0.75, selector=dict(type='violin'))
+                fig.update_traces(marker={'size': 1})
                 fig.show()
     
         return res_df
@@ -397,6 +407,13 @@ class ImmunoPhenoDB_Connect:
                 # Create a temporary mapping dictionary to change idCL names to common names
                 celltype_names = list(value['cellType'])
                 mapping_dict = dict(zip(value.index, celltype_names))
+
+                modified_mapping_dict = {}
+                
+                # Add cell type ID next to readable name
+                for i in mapping_dict:
+                    modified_mapping_dict[i] = str(i) + f" ({mapping_dict[i]})"
+                new_celltype_names = list(modified_mapping_dict.values())
                 
                 # Convert antibody to common name
                 ab_readable = convert_ab_readable(key)
@@ -405,7 +422,7 @@ class ImmunoPhenoDB_Connect:
                 plot_df = plotting_dfs[key]
                 
                 # Rename idCLs to common name
-                plot_df['cell_type'] = plot_df['idCL'].map(mapping_dict)
+                plot_df['cell_type'] = plot_df['idCL'].map(modified_mapping_dict)
 
                 # Rename normValue to z score
                 plot_df.rename(columns={'normValue': 'z score'}, inplace=True)
@@ -415,9 +432,15 @@ class ImmunoPhenoDB_Connect:
                                 x = 'cell_type', 
                                 y = 'z score', 
                                 color = 'cell_type', 
-                                category_orders={'cell_type' : celltype_names}, 
+                                category_orders={'cell_type' : new_celltype_names}, 
                                 box=True)
-                fig.update_layout(title_text=f"Cell Types for: {ab_readable} antibody", title_x = 0.45, font=dict(size=8), width=1800, height=600)
+                fig.update_layout(title_text=f"Cell Types for: {ab_readable} antibody", 
+                                  title_x = 0.45, 
+                                  font=dict(size=8), 
+                                  width=1400, 
+                                  height=600)
+                fig.update_traces(width=0.75, selector=dict(type='violin'))
+                fig.update_traces(marker={'size': 1})
                 fig.show()
                 
         return ab_df
@@ -469,4 +492,3 @@ class ImmunoPhenoDB_Connect:
             res_JSON = wc_response.json()
             res_df = pd.DataFrame.from_dict(res_JSON)
             return res_df
-        
