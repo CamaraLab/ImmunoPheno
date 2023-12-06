@@ -334,7 +334,7 @@ class ImmunoPhenoDB_Connect:
                 fig.update_layout(title_text=f"Antibodies for: {idCL_readable}", 
                                   title_x = 0.45, 
                                   font=dict(size=8), 
-                                  width=1400, 
+                                  autosize=True, 
                                   height=600)
                 fig.update_traces(width=0.75, selector=dict(type='violin'))
                 fig.update_traces(marker={'size': 1})
@@ -437,7 +437,7 @@ class ImmunoPhenoDB_Connect:
                 fig.update_layout(title_text=f"Cell Types for: {ab_readable} antibody", 
                                   title_x = 0.45, 
                                   font=dict(size=8), 
-                                  width=1400, 
+                                  autosize=True, 
                                   height=600)
                 fig.update_traces(width=0.75, selector=dict(type='violin'))
                 fig.update_traces(marker={'size': 1})
