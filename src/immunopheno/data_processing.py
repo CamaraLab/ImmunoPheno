@@ -1193,6 +1193,12 @@ def _normalize_antibody(fit_results: dict,
 
         if len(norm_signal_counts) < 2:
             normalized_z_scores = [background_cell_z_score] * len(data_vector)
+
+            # If there are too few signal cells for this antibody, we will consider it all to be
+            # background. The classification values for this antibody must also be updated
+            # to be all 0s (background)
+            classified_filt_df[ab_name].values[:] = 0
+
             return normalized_z_scores
         else:
             # For all a' values (non 0), calculate the mean and standard deviation
@@ -1205,6 +1211,12 @@ def _normalize_antibody(fit_results: dict,
                     temp_z_score = (count - norm_sig_mean) / (norm_sig_stdev)
                     if temp_z_score < background_cell_z_score:
                         temp_z_score = background_cell_z_score
+
+                        # If we are setting this to the background_cell_z_score, 
+                        # the classification value must also be updated for this cell & antibody
+                        # to be 0 (background) instead of 1 (signal)
+                        classified_filt_df.at[cell_name, ab_name] = 0
+                        
                     normalized_z_scores.append(temp_z_score)
                 elif count == 0:
                     normalized_z_scores.append(background_cell_z_score)
