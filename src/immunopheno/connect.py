@@ -239,7 +239,7 @@ def plot_antibodies_graph(idCL: str,
                     color='ab_target',
                     category_orders={'ab_target': new_ab_targets},
                     box=True)
-    fig.update_layout(title_text=f"Antibodies for: {title})",
+    fig.update_layout(title_text=f"Antibodies for: {title}",
                       xaxis_title="Antibody",
                       yaxis_title="Normalized Values",
                               title_x = 0.45, 
