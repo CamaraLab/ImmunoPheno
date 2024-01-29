@@ -247,6 +247,8 @@ def plot_antibodies_graph(idCL: str,
                               autosize=True,
                               height=600)
 
+    fig.update_yaxes(rangemode="nonnegative")
+
     fig.update_traces(width=0.75, selector=dict(type='violin'))
     fig.update_traces(marker={'size': 1})
 
@@ -291,6 +293,8 @@ def plot_celltypes_graph(ab_id: str,
                               font=dict(size=8),
                               autosize=True,
                               height=600)
+
+    fig.update_yaxes(rangemode="nonnegative")
 
     fig.update_traces(width=0.75, selector=dict(type='violin'))
     fig.update_traces(marker={'size': 1})
@@ -346,13 +350,19 @@ class ImmunoPhenoDB_Connect:
         subgraph(self._OWL_graph, self._db_idCLs, plot=True)
 
     def find_antibodies(self, 
-                        id_CLs: list, 
+                        id_CLs: list,
+                        background_id_CLs: list = None,
                         idBTO: list = None, 
                         idExperiment: list = None)-> tuple: 
+        
         # First find all descendants of the provided id_CLs. These will be included 
         # when running the LMM
         try: 
             node_fam_dict = self._find_descendants(id_CLs)
+            if background_id_CLs is not None:
+                background_fam_dict = self._find_descendants(background_id_CLs)
+            else:
+                background_fam_dict = None
         except NetworkXError as err:
             err_msg = str(err).split(' ')[2] # Get idCL error
             raise Exception(f"Error. {err_msg} not found in the database")
@@ -360,6 +370,7 @@ class ImmunoPhenoDB_Connect:
         # Call API endpoint here to get_Abs to return dataframe        
         abs_body = {
             "idCL": node_fam_dict,
+            "background": background_fam_dict,
             "idBTO": idBTO,
             "idExperiment": idExperiment
         }
@@ -423,7 +434,7 @@ class ImmunoPhenoDB_Connect:
         celltypes_response = requests.post(f"{self.url}/api/findcelltypes", json=celltypes_body)
                            
         if 'text/html' in celltypes_response.headers.get('content-type'):
-            error_msg = celltypes_response.text
+            res_dict_strjson = celltypes_response.text
             raise ValueError("No cell types found. Please try with different parameters.")
         elif 'application/json' in celltypes_response.headers.get('content-type'):
             res_dict_strjson = celltypes_response.json() # returns a dict of string-jsons
