@@ -112,7 +112,7 @@ def _umi_generator(file_path: str, chunk_range=None):
 
     for row in _read_csv(file_path, chunk_range):
         if row[0].lower() != "":
-            yield [int(x) for x in row[1:]]
+            yield [int(float(x)) for x in row[1:]]
 
 def _gene_name_generator(file_path: str):
     """
