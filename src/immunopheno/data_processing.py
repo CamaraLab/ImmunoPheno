@@ -1428,6 +1428,10 @@ class ImmunoPhenoData:
             self._temp_protein = self._protein_matrix.copy(deep=True)
     
     @property
+    def all_fits_dict(self):
+        return self._all_fits_dict
+
+    @property
     def classified_filt(self):
         return self._classified_filt_df
 
@@ -1681,10 +1685,6 @@ class ImmunoPhenoData:
             model (str): type of model to fit. "gaussian" or "nb"
             plot (bool): option to plot each model
             **kwargs: initial arguments for sklearn's GaussianMixture (optional) 
-
-        Returns:
-            fit_all_results (list): list of dictionaries, with each dictionary 
-            containing optimization results for an antibody
         """
 
         fit_all_results = []
@@ -1704,8 +1704,6 @@ class ImmunoPhenoData:
 
         # Store in class
         self._all_fits = fit_all_results
-
-        return self._all_fits_dict
 
     def normalize_all_antibodies(self,
                                  p_threshold: float = 0.05,
