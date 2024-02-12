@@ -13,71 +13,10 @@ import plotly.graph_objects as go
 import networkx as nx
 from networkx.exception import NetworkXError
 from nxontology.imports import from_file
+from networkx.algorithms.dag import dag_longest_path
 
 import matplotlib.pyplot as plt
 from netgraph import Graph
-
-def hierarchy_pos(G, root=None, width=1., vert_gap = 0.2, vert_loc = 0, xcenter = 0.5):
-
-    '''
-    If the graph is a tree this will return the positions to plot this in a 
-    hierarchical layout.
-    
-    G: the graph (must be a tree)
-    
-    root: the root node of current branch 
-    - if the tree is directed and this is not given, 
-      the root will be found and used
-    - if the tree is directed and this is given, then 
-      the positions will be just for the descendants of this node.
-    - if the tree is undirected and not given, 
-      then a random choice will be used.
-    
-    width: horizontal space allocated for this branch - avoids overlap with other branches
-    
-    vert_gap: gap between levels of hierarchy
-    
-    vert_loc: vertical location of root
-    
-    xcenter: horizontal location of root
-    '''
-    if not nx.is_tree(G):
-        raise TypeError('cannot use hierarchy_pos on a graph that is not a tree')
-
-    if root is None:
-        if isinstance(G, nx.DiGraph):
-            root = next(iter(nx.topological_sort(G)))  #allows back compatibility with nx version 1.11
-        else:
-            root = random.choice(list(G.nodes))
-
-    def _hierarchy_pos(G, root, width=1., vert_gap = 0.2, vert_loc = 0, xcenter = 0.5, pos = None, parent = None):
-        '''
-        see hierarchy_pos docstring for most arguments
-
-        pos: a dict saying where all nodes go if they have been assigned
-        parent: parent of this branch. - only affects it if non-directed
-
-        '''
-    
-        if pos is None:
-            pos = {root:(xcenter,vert_loc)}
-        else:
-            pos[root] = (xcenter, vert_loc)
-        children = list(G.neighbors(root))
-        if not isinstance(G, nx.DiGraph) and parent is not None:
-            children.remove(parent)  
-        if len(children)!=0:
-            dx = width/len(children) 
-            nextx = xcenter - width/2 - dx/2
-            for child in children:
-                nextx += dx
-                pos = _hierarchy_pos(G,child, width = dx, vert_gap = vert_gap, 
-                                    vert_loc = vert_loc-vert_gap, xcenter=nextx,
-                                    pos=pos, parent = root)
-        return pos
-
-            
-    return _hierarchy_pos(G, root, width, vert_gap, vert_loc, xcenter)
 
 def _update_cl_owl():
     warnings.filterwarnings("ignore")
@@ -85,11 +24,21 @@ def _update_cl_owl():
     owl_link = response.json()['config']['versionIri']
     return owl_link
 
-def subgraph(G, nodes, plot=False):
+def graph_pos(G):
+    result = Graph(G, node_layout='dot')
+    plt.close()
+    return result.node_positions
+
+def find_leaf_nodes(graph, node):
+    descendants = nx.descendants(graph, node)
+    leaf_nodes = [n for n in descendants if graph.out_degree(n) == 0]
+    return leaf_nodes
+
+def subgraph(G, nodes: list):
     root='CL:0000000'
     if root in nodes:
         raise Exception("Error. Root node cannot be a target node")
-        
+    
     node_unions = []
     for node in nodes:
         # For each node in the list, get all of their paths from the root
@@ -139,43 +88,86 @@ def subgraph(G, nodes, plot=False):
     # Create a subgraph
     subgraph = G.subgraph(subgraph_nodes)
 
-    if plot:
-        if nx.is_tree(subgraph) and len(all_LCA) == 1:
-            pos = hierarchy_pos(subgraph, all_LCA[0])  
-             
-            # Define color map
-            color_map = ["#FCC8C8" if node in nodes else "#C8ECFC" for node in subgraph] 
-            plt.figure(figsize=(4, 4))
-            nx.draw(subgraph,
-                    pos=pos, 
-                    font_size=7, 
-                    node_size=[len(v)**2 * 20 for v in subgraph.nodes()],    
-                    node_color=color_map, 
-                    with_labels=True)
-            plt.show()
-            
-        else:
-            node_color = dict()
-            for node in subgraph.nodes:
-                node_color[node] = "#FCC8C8" if node in nodes else "#C8ECFC"
-            
-            plt.figure(figsize=(20, 20))
-            
-            Graph(subgraph, 
-                  node_layout = 'dot', 
-                  node_color = node_color, 
-                  node_size=(3), 
-                  node_labels=True, 
-                  node_label_fontdict=dict(size=9),
-                  edge_color='black', 
-                  edge_layout='straight', 
-                  edge_label_fontdict=dict(fontweight='bold'), 
-                  node_edge_width=0.1, 
-                  edge_width=0.3, 
-                  arrows=True)
-            plt.show()
-        
     return subgraph
+
+def plotly_subgraph(G, leaf_nodes):
+    # Display a singular node
+    if len(leaf_nodes) == 1:
+        G = nx.DiGraph()
+        G.add_node(leaf_nodes[0])
+        
+    # Get positions using a layout algorithm from netgraph 'dot'
+    pos = graph_pos(G)
+    
+    # Extract node coordinates for Plotly
+    node_x = [pos[node][0] for node in G.nodes]
+    node_y = [pos[node][1] for node in G.nodes]
+    
+    # Create a list of nodes to stand out (e.g., nodes in list A)
+    nodes_to_stand_out = leaf_nodes
+    
+    # Create node trace
+    node_trace = go.Scatter(
+        x=node_x,
+        y=node_y,
+        mode="markers+text",  # Include text labels
+        hoverinfo="text",
+        text=list(G.nodes),  # Use node labels as text
+        line=dict(color="black", width=2)
+    )
+    
+    # Create a list of colors for each node
+    node_colors = ["#FCC8C8" if node in nodes_to_stand_out else "#C8ECFC" for node in G.nodes]
+    
+    node_trace.marker = dict(
+        color=node_colors,
+        size=[20 + 5 * len(str(label)) for label in G.nodes],
+        opacity=1,
+        line=dict(color="black", width=1),  # Add black circular rim around each node
+    )
+    
+    # Dynamically set node size based on label length
+    max_label_length = max(len(str(label)) for label in G.nodes)
+    node_trace.marker.size = [12 + 3 * len(str(label)) for label in G.nodes]
+    
+    # Adjust the font size of the labels
+    node_trace.textfont = dict(size=6.5)
+    
+    # Create edge trace
+    edge_x = []
+    edge_y = []
+    for edge in G.edges:
+        x0, y0 = pos[edge[0]]
+        x1, y1 = pos[edge[1]]
+        edge_x.extend([x0, x1, None])
+        edge_y.extend([y0, y1, None])
+    
+    edge_trace = go.Scatter(
+        x=edge_x,
+        y=edge_y,
+        line=dict(width=1, color="#888"),
+        hoverinfo="none",
+        mode="lines",
+    )
+    
+    # Create layout
+    layout = go.Layout(
+        showlegend=False,
+        hovermode="closest",
+        margin=dict(b=0, l=0, r=0, t=0),
+        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+    )
+    
+    # Create figure
+    fig = go.Figure(data=[edge_trace, node_trace], layout=layout)
+    # Get depth of graph
+    depth = len(dag_longest_path(G))
+    adjusted_height = depth * 110
+    fig.update_layout(autosize=True,height=adjusted_height)
+    
+    # Show the plot
+    return fig
 
 def convert_idCL_readable(idCL:str):
     idCL_params = {
@@ -247,8 +239,6 @@ def plot_antibodies_graph(idCL: str,
                               autosize=True,
                               height=600)
 
-    fig.update_yaxes(rangemode="nonnegative")
-
     fig.update_traces(width=0.75, selector=dict(type='violin'))
     fig.update_traces(marker={'size': 1})
 
@@ -293,8 +283,6 @@ def plot_celltypes_graph(ab_id: str,
                               font=dict(size=8),
                               autosize=True,
                               height=600)
-
-    fig.update_yaxes(rangemode="nonnegative")
 
     fig.update_traces(width=0.75, selector=dict(type='violin'))
     fig.update_traces(marker={'size': 1})
@@ -346,8 +334,21 @@ class ImmunoPhenoDB_Connect:
 
         return node_fam_dict
     
-    def plot_db_graph(self):
-        subgraph(self._OWL_graph, self._db_idCLs, plot=True)
+    def plot_db_graph(self, root=None):
+        if root is None:
+            # The atabase's subgraph is already in self._subgraph
+            plotly_graph = plotly_subgraph(self._subgraph, self._db_idCLs)
+        else:
+            leaf_nodes = find_leaf_nodes(self._subgraph, root)
+            if len(leaf_nodes) == 0:
+                # There is no further subgraph to take if provided a leaf node
+                plotly_graph = plotly_subgraph(self._subgraph, [root])
+            else:
+                # Find a new subgraph using our existing database subgraph
+                custom_subgraph = subgraph(self._subgraph, leaf_nodes)
+                plotly_graph = plotly_subgraph(custom_subgraph, leaf_nodes)
+                
+        return plotly_graph
 
     def find_antibodies(self, 
                         id_CLs: list,
