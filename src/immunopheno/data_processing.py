@@ -1,3 +1,4 @@
+import math
 import numpy as np
 import scipy
 import scipy.stats as ss
@@ -16,18 +17,22 @@ from tqdm.autonotebook import tqdm
 from .models import _gmm_results, _nb_mle_results
 from sklearn.linear_model import LinearRegression
 
-def _clean_adt(protein_filepath: str) -> pd.DataFrame:
+def _load_adt(protein: str | pd.DataFrame) -> pd.DataFrame:
     """
-    Transposes the protein DataFrame
+    Loads the protein data from CSV or pandas DataFrame
 
     Parameters:
-      protein_df (Pandas DataFrame): protein data, rows = proteins, cols = cells
+      protein (str or pd.DataFrame): csv file path or dataframe where:
+        rows = proteins, cols = cells
 
     Returns:
-      protein_df_copy (Pandas DataFrame): transposed df
+      protein_df_copy (Pandas DataFrame): 
     """
 
-    protein_df = pd.read_csv(protein_filepath, sep=",", index_col=[0]).T
+    if isinstance(protein, str):
+        protein_df = pd.read_csv(protein, sep=",", index_col=[0]) # no transpose
+    else:
+        protein_df = protein
 
     return protein_df
 
@@ -112,7 +117,7 @@ def _umi_generator(file_path: str, chunk_range=None):
 
     for row in _read_csv(file_path, chunk_range):
         if row[0].lower() != "":
-            yield [int(float(x)) for x in row[1:]]
+            yield [int(x) for x in row[1:]]
 
 def _gene_name_generator(file_path: str):
     """
@@ -201,7 +206,8 @@ def _load_rna_parallel(gene_filepath: str) -> pd.DataFrame:
     def process_section(chunk):
         umi_chunk = _umi_generator(gene_filepath, chunk)
         umi_chunk_df = pd.DataFrame.sparse.from_spmatrix(scipy.sparse.csr_matrix(list(umi_chunk)))
-        return umi_chunk_df.T # less expensive to transpose here compare to the end
+        # return umi_chunk_df.T # less expensive to transpose here compare to the end
+        return umi_chunk_df # no transpose, assume user provides cells as rows, ab as columns
         
     for chunk in gene_ranges:
         partition_ranges = _clean_chunks(_generate_range(chunk[1], 
@@ -224,29 +230,35 @@ def _load_rna_parallel(gene_filepath: str) -> pd.DataFrame:
     
     return results_df
 
-def _clean_rna(gene_filepath: str) -> pd.DataFrame:
+def _load_rna(gene: str | pd.DataFrame) -> pd.DataFrame:
     """
-    Loads in RNA data from a CSV to a pandas DataFrame
+    Loads in RNA data from a CSV or pandas DataFrame
     
     Parameters:
-        gene_filepath (str): csv file path with rows (genes) x columns (cells)
+        gene (str or pd.DataFrame): csv file path with rows (genes) x columns (cells)
     
     Returns:
         rna_df (pd.DataFrame): RNA dataframe with rows (cells) x columns (genes)
     """
-    
-    # If the number of cells is <= 20k, we can use pandas directly to load
-    # Create a generator to get all the column names
-    rna_data = _read_csv(gene_filepath)
-    cell_columns = [next(rna_data, None) for _ in range(1)][0][1:]
-    
-    if len(cell_columns) <= 20000:
-        rna_df = pd.read_csv(gene_filepath, sep=",", index_col=[0]).T
-    
-    # Otherwise, load in parallel
+
+    # For csv file paths
+    if isinstance(gene, str):
+        # If the number of cells is <= 20k, we can use pandas directly to load
+        # Create a generator to get all the column names
+        rna_data = _read_csv(gene)
+        cell_columns = [next(rna_data, None) for _ in range(1)][0][1:]
+        
+        if len(cell_columns) <= 20000:
+            # rna_df = pd.read_csv(gene_filepath, sep=",", index_col=[0]).T
+            rna_df = pd.read_csv(gene, sep=",", index_col=[0]) # assume user provides cells as rows
+        
+        # Otherwise, load in parallel
+        else:
+            rna_df = _load_rna_parallel(gene)
+
     else:
-        rna_df = _load_rna_parallel(gene_filepath)
-    
+        rna_df = gene
+
     return rna_df
 
 def _singleR_rna(rna: pd.DataFrame) -> pd.DataFrame:
@@ -266,7 +278,7 @@ def _singleR_rna(rna: pd.DataFrame) -> pd.DataFrame:
     # We will filter out unused genes from the RNA dataset that are not in that list
     hpca_genes_path = str(files('immunopheno.data').joinpath('hpca_genes.txt'))
     hpca_genes = set(line.strip() for line in open(hpca_genes_path))
-    
+
     rna_column_genes = pd.Index([x.upper() for x in rna.columns])
     return rna.loc[:, rna_column_genes.isin([x.upper() for x in hpca_genes])]
 
@@ -278,7 +290,8 @@ def _read_antibodies(csv_file: str) -> list:
         csv_file (str): name of csv file containing antibody names
     
     Returns:
-        antibodies (list): list of antibody ids (ex: AB_XXXXXXX)
+        antibodies (list): list of tuples with ab_name and antibody ids 
+        ex: [("CD4", "AB_XXXXXXX"), ("CD5", "AB_XXXXXXX"))
     """
     antibodies = []
 
@@ -300,7 +313,7 @@ def _filter_antibodies(protein_matrix: pd.DataFrame,
                        csv_file: str) -> pd.DataFrame:
     """
     Filters ADT protein table using only antibodies found in 
-    a user-provided spreadsheet
+    a user-provided spreadsheet. Used for uploads to database
     
     Parameters:
         protein_matrix (pd.DataFrame): protein data 
@@ -314,31 +327,34 @@ def _filter_antibodies(protein_matrix: pd.DataFrame,
     antibody_pairs = _read_antibodies(csv_file)
     antibodies_list = [ab[0] for ab in antibody_pairs]
 
-    # Subset the columns that are in our spreadsheet
-    filt_df = protein_matrix.loc[antibodies_list]
+    # Subset the columns in the dataframe that are in our spreadsheet
+    filt_df = protein_matrix.T.loc[antibodies_list]
     
     return filt_df.T
 
-def _clean_labels(cell_label_df: pd.DataFrame) -> pd.DataFrame:
+def _load_labels(labels: str | pd.DataFrame) -> pd.DataFrame:
     """
     Shifts the first column (cell names) to become the index.
     Remaining column will contain the cell types.
 
     Parameters:
-        cell_label_df (Pandas DataFrame): cell types, rows = cells, cols = types
+        cell_label_df (Pandas DataFrame): cell types, rows = cells, col = types
     
     Returns:
         cell_label_modified (Pandas DataFrame): cell types with only one column
     """
-
-    cell_label_modified = cell_label_df.copy(deep=True)
-    # Shift the first column to be the index
-    cell_label_modified.index = cell_label_modified.iloc[:, 0]
-    # Drop first column
-    cell_label_modified.drop(columns=cell_label_df.columns[0],
-                                axis=1,
-                                inplace=True)
-    
+    if isinstance(labels, str):
+        labels_df = pd.read_csv(labels, header=None)
+        cell_label_modified = labels_df.copy(deep=True)
+        # Shift the first column to be the index
+        cell_label_modified.index = cell_label_modified.iloc[:, 0]
+        # Drop first column
+        cell_label_modified.drop(columns=labels_df.columns[0],
+                                    axis=1,
+                                    inplace=True)
+    else:
+        cell_label_modified = labels
+        
     return cell_label_modified
 
 def _log_transform(d_vect: list,
@@ -651,20 +667,20 @@ def _filter_classified_df(classified_df: pd.DataFrame,
             the defined threshold for signal expression
     """
     num_ab = len(classified_df.columns)
-    num_original_cells = len(classified_df.index)
+    # num_original_cells = len(classified_df.index)
 
     # We want to first filter out cells that have 0 expression automatically
-    none_filt = classified_df[(classified_df == 1).sum(axis=1) > 0]
+    # none_filt = classified_df[(classified_df == 1).sum(axis=1) > 0]
 
-    # We also want to filter out cells that have 100 expression automatically
-    all_filt = none_filt[(classified_df == 1).sum(axis=1) < num_ab]
+    # # We also want to filter out cells that have 100 expression automatically
+    # all_filt = none_filt[(classified_df == 1).sum(axis=1) < num_ab]
 
-    num_filt = num_original_cells - len(all_filt.index)
-    logging.warning(f" {num_filt} cells with 0% or 100% expression have been " 
-                    "automatically filtered out.")
+    # num_filt = num_original_cells - len(all_filt.index)
+    # logging.warning(f" {num_filt} cells with 0% or 100% expression have been " 
+    #                 "automatically filtered out.")
 
     # Filter out cells that have a majority expresssing signal (user-defined)
-    filtered_df = all_filt[(((all_filt == 1).sum(axis=1) 
+    filtered_df = classified_df[(((classified_df == 1).sum(axis=1) 
                             / num_ab)) <= sig_threshold]
     
     # Filter out cells that have a majority expressing background (user-defined)
@@ -672,12 +688,13 @@ def _filter_classified_df(classified_df: pd.DataFrame,
                                 / num_ab) >= bg_threshold)]
     
     # Clarifying messages for total number of filtered cells
-    additional_filt = len(all_filt.index) - len(filtered_df.index)
+    additional_filt = len(classified_df.index) - len(filtered_df.index)
     logging.warning(f" {additional_filt} additional cells have been filtered "
                     f"based on {sig_threshold} sig_expr and {bg_threshold} "
                     "bg_expr thresholds.")
     
-    total_filt = num_filt + additional_filt
+    # total_filt = num_filt + additional_filt
+    total_filt = additional_filt
     logging.warning(f" Total cells filtered: {total_filt}")
 
     return filtered_df
@@ -873,14 +890,15 @@ def _z_avg_umi_sum_by_type(bg_z_score_df: pd.DataFrame,
     # Add the list of types into the z_umi_df
     z_umi_df['type'] = list(labels_filt_df.iloc[:, 0])
     
-    z_umi_clean = z_umi_df.dropna()
+    # Filter cells that contain any NA values in their z scores average
+    # z_umi_clean = z_umi_df.dropna() # don't do it here! do it when we actually call lin_reg
 
     # Find all cell types 
     unique_cell_types = list(set(labels_filt_df.iloc[:, 0]))
 
     # Separate all cells out by cell type
     for cell_type in unique_cell_types:
-        temp_df = pd.DataFrame(z_umi_clean.loc[z_umi_clean['type'] == cell_type])
+        temp_df = pd.DataFrame(z_umi_df.loc[z_umi_df['type'] == cell_type])
         df_by_type.append(temp_df)
         df_by_type_dict[cell_type] = temp_df
 
@@ -900,11 +918,20 @@ def _linear_reg(z_umi: pd.DataFrame) -> pd.DataFrame:
             residuals, and p-values for each cell 
     """
 
+    # The final predicted values
     lin_reg_df = z_umi.copy(deep=True)
+    z_umi_og_x = np.log(z_umi['total_umi'].values)
+    z_umi_og_y = z_umi['z_score_avg']
+    
+    # Filter out any cells (rows) containing NAs that would have caused
+    # the Linear Regression to crash.
+    # This is ONLY for the purpose of creating the Linear Regression model
+    # The final predicted values will still be using the ORIGINAL cells
+    z_umi_clean = z_umi.dropna()
 
     # Log transform the umi values (x axis)
-    x_val = np.log(z_umi['total_umi'].values)
-    y_val = z_umi['z_score_avg']
+    x_val = np.log(z_umi_clean['total_umi'].values)
+    y_val = z_umi_clean['z_score_avg']
 
     # Find p-value of beta1 (coefficient)
     X2 = sm.add_constant(x_val)
@@ -918,10 +945,10 @@ def _linear_reg(z_umi: pd.DataFrame) -> pd.DataFrame:
     lm.fit(X=x_val.reshape(-1, 1), y=y_val)
 
     # Find predicted values
-    lm_predict = lm.predict(x_val.reshape(-1, 1))
+    lm_predict = lm.predict(z_umi_og_x.reshape(-1, 1))
 
     # Calculate residuals
-    lm_residuals = y_val.values - lm_predict
+    lm_residuals = z_umi_og_y - lm_predict
 
     # Add everything to dataframe
     lin_reg_df['predicted'] = lm_predict
@@ -1158,7 +1185,12 @@ def _normalize_antibody(fit_results: dict,
                     factor = 0
 
                     if lin_reg.loc[cell_name]['p_val'] < p_threshold:
-                        factor += lin_reg.loc[cell_name]['predicted']
+                        predicted = lin_reg.loc[cell_name]['predicted']
+
+                        if math.isnan(predicted) is False:
+                            factor += predicted
+                        else:
+                            factor += 0
                     
                     # Apply normalization formula
                     normalized_val = (cell_count 
@@ -1178,9 +1210,21 @@ def _normalize_antibody(fit_results: dict,
 
                     # Look up this cell's linear regression dataframe in the dict
                     if lin_reg_dict[cell_type].loc[cell_name]['p_val'] < p_threshold:
-
                         # We can regress out the predicted z score
-                        factor += lin_reg_dict[cell_type].loc[cell_name]['predicted']
+                        predicted = lin_reg_dict[cell_type].loc[cell_name]['predicted']
+
+                        if math.isnan(predicted) is False:
+                            factor += predicted
+                        else:
+                            factor += 0
+
+                        # Regress out on the residual
+                        residual = lin_reg_dict[cell_type].loc[cell_name]['residual']
+
+                        if math.isnan(residual) is False:
+                            factor += predicted
+                        else:
+                            factor += 0
 
                     # Apply normalization formula
                     normalized_val = (cell_count 
@@ -1216,7 +1260,7 @@ def _normalize_antibody(fit_results: dict,
                         # the classification value must also be updated for this cell & antibody
                         # to be 0 (background) instead of 1 (signal)
                         classified_filt_df.at[cell_name, ab_name] = 0
-                        
+
                     normalized_z_scores.append(temp_z_score)
                 elif count == 0:
                     normalized_z_scores.append(background_cell_z_score)
@@ -1253,7 +1297,8 @@ def _normalize_antibodies_df(protein_cleaned_filt_df: pd.DataFrame,
             separating by cell type
 
     Returns:
-        normalized_df_transpose (pd.DataFrame): 
+        normalized_df_transpose (pd.DataFrame): DataFrame containing normalized 
+            z-score values for all cells in a given antibody
     """
 
     normalized_list = []
@@ -1335,27 +1380,34 @@ class ImmunoPhenoData:
     normalization to antibodies present in a protein dataset. 
 
     Parameters:
-        protein_matrix (str): file path to ADT count matrix with row (antibodies) x column (cells)
-        gene_matrix (str): file path to UMI count matrix with row (genes) x column (cells)
+        protein_matrix (str or dataframe): file path or dataframe to ADT count matrix 
+            Where: Row index (cells) x column (antibodies)
+        gene_matrix (str): file path or dataframe to UMI count matrix
+            Where: Row index (cells) x column (genes)
+        cell_labels (pd.DataFrame): file path or dataframe
+            Where: Row index (cells) x column (cell type such as Cell Ontology ID)
         spreadsheet (str): name of csv file containing a spreadsheet with
-            information about the experiment and antibodies
+            information about the experiment and antibodies. Used for uploading to a database
         scanpy (AnnData object): scanpy anndata object used to load in protein and gene data
-        cell_labels (pd.DataFrame): matrix with cell x cell type (ex: Cell Ontologies)
+        scanpy_labels (str): name of the field inside a scanpy object with the cell labels
+            Where: scanpy is an AnnData object containing an 'obs' field
+                Ex: AnnData.obs['scanpy_labels']
     """
     def __init__(self, 
-                 protein_matrix: str = None, 
-                 gene_matrix: str = None,
+                 protein_matrix: str | pd.DataFrame = None, 
+                 gene_matrix: str | pd.DataFrame = None,
+                 cell_labels: str | pd.DataFrame = None,
                  spreadsheet: str = None,
                  scanpy: anndata.AnnData = None,
-                 cell_labels: pd.DataFrame = None):
+                 scanpy_labels: str = None):
         
         # Raw values
         self._protein_matrix = protein_matrix
         self._gene_matrix = gene_matrix
         self._spreadsheet = spreadsheet
         self._cell_labels = cell_labels
-        self._label_certainties = None
         self._scanpy = scanpy
+        self._label_certainties = None
 
         # Temp values (for resetting index)
         self._temp_protein = None
@@ -1372,6 +1424,11 @@ class ImmunoPhenoData:
         self._linear_reg_df = None
         self._z_scores_df = None
         self._singleR_rna = None
+        
+        # Used when sending data to the server for running STvEA
+        self._background_cell_z_score = -10
+        self._stvea_correction_value = 0
+        self._stvea_normalized_df = None
 
         # If loading in a scanpy object
         if scanpy is not None:
@@ -1380,7 +1437,7 @@ class ImmunoPhenoData:
             protein_df = protein_anndata.to_df(layer="counts")
             self._protein_matrix = protein_df.copy(deep=True)
             self._temp_protein = self._protein_matrix.copy(deep=True)
-
+ 
             # Extract and load rna/gene data
             rna_anndata = scanpy[:, scanpy.var["feature_types"] == "Gene Expression"].copy()
             gene_df = rna_anndata.to_df(layer="counts")
@@ -1390,41 +1447,51 @@ class ImmunoPhenoData:
             # Filter out rna based on genes used for SingleR
             self._singleR_rna = _singleR_rna(self._gene_matrix)
 
+            # Use scanpy cell labels if present
+            if scanpy_labels is not None:
+                try:
+                    labels = scanpy.obs[scanpy_labels]
+                    # Load these labels into the class
+                    self._cell_labels = pd.DataFrame(labels)
+                    self._temp_labels = self._cell_labels.copy(deep=True)
+                except:
+                    raise Exception("Field not found in scanpy object")
+
         if protein_matrix is None and scanpy is None:
-            raise LoadMatrixError("protein_matrix file path must be provided")
+            raise LoadMatrixError("protein_matrix file path or dataframe must be provided")
 
         if (protein_matrix is not None and 
             cell_labels is not None and 
             gene_matrix is None and
             scanpy is None):
-            raise LoadMatrixError("gene_matrix file path must be present along with "
+            raise LoadMatrixError("gene_matrix file path or dataframe must be present along with "
                                   "cell_labels")
         
         # Single cell
         if self._protein_matrix is not None and self._gene_matrix is not None and scanpy is None:
-            self._protein_matrix = _clean_adt(self._protein_matrix)
+            self._protein_matrix = _load_adt(self._protein_matrix) # assume user provides cells as rows, ab as col
             self._temp_protein = self._protein_matrix.copy(deep=True)
 
-            self._gene_matrix = _clean_rna(self._gene_matrix)
+            self._gene_matrix = _load_rna(self._gene_matrix) # assume user provides cells as rows, genes as col
             self._singleR_rna = _singleR_rna(self._gene_matrix)
             self._temp_gene = self._gene_matrix.copy(deep=True)
 
         # Flow
         elif self._protein_matrix is not None and self._gene_matrix is None and scanpy is None:
-            self._protein_matrix = _clean_adt(self._protein_matrix)
+            self._protein_matrix = _load_adt(self._protein_matrix)  # assume user provides cells as rows, ab as col
             self._temp_protein = self._protein_matrix.copy(deep=True)
             self._gene_matrix = None
 
-        # If dealing with single cell data
+        # If dealing with single cell data with provided cell labels
         if self._cell_labels is not None:
-            self._cell_labels = _clean_labels(self._cell_labels)
+            self._cell_labels = _load_labels(self._cell_labels) # assume user provides cells as rows, label as col
             self._temp_labels = self._cell_labels.copy(deep=True)
         else:
             cell_labels = None
 
-        # If filtering antibodies using a provided spreadsheet
-        if spreadsheet is not None:
-            self._protein_matrix = _filter_antibodies(self._protein_matrix.T, spreadsheet)
+        # If filtering antibodies using a provided spreadsheet for database uploads
+        if spreadsheet is not None: 
+            self._protein_matrix = _filter_antibodies(self._protein_matrix, spreadsheet)
             self._temp_protein = self._protein_matrix.copy(deep=True)
     
     @property
@@ -1442,10 +1509,18 @@ class ImmunoPhenoData:
     @property
     def protein(self):
         return self._protein_matrix
+    
+    @protein.setter
+    def protein(self, value):
+        self._protein_matrix = value
 
     @property 
     def rna(self):
         return self._gene_matrix
+    
+    @rna.setter
+    def rna(self, value):
+        self._gene_matrix = value
 
     @property
     def norm_cell_labels(self):
@@ -1464,7 +1539,7 @@ class ImmunoPhenoData:
         return self._label_certainties
     
     @label_certainties.setter
-    def label_certainties(self, value):
+    def label_certainties(self, value): 
         self._label_certainties = value
 
     def reset_index(self):
@@ -1752,13 +1827,13 @@ class ImmunoPhenoData:
         # Classify all cells as either background or signal
         classified_cells = _classify_cells_df(all_fits, self._protein_matrix)
 
-        # Filter out cells that have a high signal:background ratio (default: 0.85)
+        # Filter out cells that have a high signal: background ratio (default: 1.0)
         classified_cells_filt = _filter_classified_df(classified_cells, 
                                                     sig_threshold=sig_expr_threshold,
                                                     bg_threshold=bg_expr_threshold)
         self._classified_filt_df = classified_cells_filt
 
-        # # Filter the same cells from the protein data
+        # Filter the same cells from the protein data
         protein_cleaned_filt = _filter_count_df(classified_cells_filt, 
                                                 self._protein_matrix)
         
@@ -1775,13 +1850,22 @@ class ImmunoPhenoData:
         # Extract z scores for background cells
         background_z_scores = _bg_z_scores_df(classified_cells_filt, z_scores)
 
+        # Set the background cell z score to the class attribute (for STvEA)
+        self._background_cell_z_score = bg_cell_z_score
+
+        # The server currently uses +10 adjustment to all background cells
+        # Calculate the additional adjustment from the user-provided background cell z score
+        # Example: bg_cell_z_score: -10, stvea_correction_value: 0
+        # Example: bg_cell_z_score: -3, stvea_correction_value: 7
+        self._stvea_correction_value = 10 + bg_cell_z_score
+
         # If dealing with single cell data with cell_labels,
         # Run linear regression to regress out z scores based on size and cell type
         if self._gene_matrix is not None and self._cell_labels is not None:
             df_by_type = _z_avg_umi_sum_by_type(background_z_scores,
                                                 self._gene_matrix,
                                                 cell_labels_filt)
-
+            
             lin_reg_type = _linear_reg_by_type(df_by_type)
             self._linear_reg_df = lin_reg_type
 
@@ -1821,5 +1905,7 @@ class ImmunoPhenoData:
                                     classified_filt_df=classified_cells_filt)
         
         self._normalized_counts_df = normalized_df
+        self._stvea_normalized_df = normalized_df.copy(deep=True).applymap(
+                        lambda x: x + self._stvea_correction_value if x != 0 else x)
 
         return normalized_df
