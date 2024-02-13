@@ -16,6 +16,7 @@ from tqdm.autonotebook import tqdm
 
 from .models import _gmm_results, _nb_mle_results
 from sklearn.linear_model import LinearRegression
+from itertools import zip_longest
 
 def _load_adt(protein: str | pd.DataFrame) -> pd.DataFrame:
     """
@@ -88,18 +89,21 @@ def _read_csv(file_path: str, chunk_range=None):
     
     if chunk_range is not None:
     # Use set for O(1) average lookup
-        row_indices = set(range(chunk_range[0], chunk_range[1]))
+        col_indices = set(range(chunk_range[0], chunk_range[1]))
         
     with open(file_path, "r") as f:
         reader = csv.reader(f)
         
+        # Transpose the rows to columns using zip_longest
+        transposed_rows = zip_longest(*reader)
+
         if chunk_range is not None:
-            for i, line in enumerate(reader):
-                if i in row_indices:   
-                    yield (line)
+            for i, column in enumerate(transposed_rows):
+                if i in col_indices:
+                    yield list(column)
         else:
-            for row in reader: 
-                yield row
+            for column in transposed_rows:
+                yield list(column)
 
 def _umi_generator(file_path: str, chunk_range=None):
     """
