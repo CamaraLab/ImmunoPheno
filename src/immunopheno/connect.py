@@ -90,21 +90,13 @@ def subgraph(G, nodes: list):
 
     return subgraph
 
-def plotly_subgraph(G, leaf_nodes):
-    # Display a singular node
-    if len(leaf_nodes) == 1:
-        G = nx.DiGraph()
-        G.add_node(leaf_nodes[0])
-        
+def plotly_subgraph(G, nodes_to_highlight, hover_text):
     # Get positions using a layout algorithm from netgraph 'dot'
     pos = graph_pos(G)
     
     # Extract node coordinates for Plotly
     node_x = [pos[node][0] for node in G.nodes]
     node_y = [pos[node][1] for node in G.nodes]
-    
-    # Create a list of nodes to stand out (e.g., nodes in list A)
-    nodes_to_stand_out = leaf_nodes
     
     # Create node trace
     node_trace = go.Scatter(
@@ -113,11 +105,12 @@ def plotly_subgraph(G, leaf_nodes):
         mode="markers+text",  # Include text labels
         hoverinfo="text",
         text=list(G.nodes),  # Use node labels as text
+        hovertext=hover_text, # Add in custom hover labels
         line=dict(color="black", width=2)
     )
     
     # Create a list of colors for each node
-    node_colors = ["#FCC8C8" if node in nodes_to_stand_out else "#C8ECFC" for node in G.nodes]
+    node_colors = ["#FCC8C8" if node in nodes_to_highlight else "#C8ECFC" for node in G.nodes]
     
     node_trace.marker = dict(
         color=node_colors,
@@ -295,8 +288,7 @@ class ImmunoPhenoDB_Connect:
         self._OWL_graph = None
         self._subgraph = None
         self._db_idCLs = None
-        self._descendants = None
-        self._lmm_results = None
+        self._db_idCL_names = None
 
         if "://" not in self.url:
             self.url = "http://" + self.url
@@ -318,6 +310,13 @@ class ImmunoPhenoDB_Connect:
 
                 self._db_idCLs = idCLs
                 self._subgraph = subgraph(self._OWL_graph, self._db_idCLs)
+
+                idCL_names = {}
+                # Find all readable cell type names for each node
+                for node in list(self._subgraph.nodes):
+                    idCL_names[node] = convert_idCL_readable(node)
+                self._db_idCL_names = idCL_names
+                
                 print("Connected to database.")
             except:
                 raise Exception("Error. Unable to connect to database")
@@ -336,17 +335,56 @@ class ImmunoPhenoDB_Connect:
     
     def plot_db_graph(self, root=None):
         if root is None:
-            # The atabase's subgraph is already in self._subgraph
-            plotly_graph = plotly_subgraph(self._subgraph, self._db_idCLs)
+            # We already calculated the database's subgraph in self._subgraph
+            # Find hover names
+            hover_names = []
+            for node in list(self._subgraph.nodes):
+                hover_names.append(self._db_idCL_names[node])
+            plotly_graph = plotly_subgraph(self._subgraph, self._db_idCLs, hover_names)
+        
         else:
             leaf_nodes = find_leaf_nodes(self._subgraph, root)
+            
             if len(leaf_nodes) == 0:
-                # There is no further subgraph to take if provided a leaf node
-                plotly_graph = plotly_subgraph(self._subgraph, [root])
+                # If there are no leaf nodes of root, then we were already provided a leaf node
+                # We can plot this singular node directly
+                nodes_to_plot = [root]
+                # Check if this node was in our database
+                node_in_db = list(set(nodes_to_plot) & set(self._db_idCLs))
+                # Take subgraph using default function
+                default_subgraph = nx.subgraph(self._subgraph, nodes_to_plot)
+                # Find hover names
+                hover_names = []
+                for node in list(default_subgraph.nodes):
+                    hover_names.append(self._db_idCL_names[node])
+                plotly_graph = plotly_subgraph(default_subgraph, node_in_db, hover_names)
+                
+            elif len(leaf_nodes) == 1:
+                # If there was only one leaf node, we can directly plot the descendants to that node
+                nodes_to_plot = list(nx.descendants(self._subgraph, root))
+                # Include the original node
+                nodes_to_plot.insert(0, root)
+                # Check if these were in the database
+                node_in_db = list(set(nodes_to_plot) & set(self._db_idCLs))
+                # Take subgraph using default function
+                default_subgraph = nx.subgraph(self._subgraph, nodes_to_plot)
+                # Find hover names
+                hover_names = []
+                for node in list(default_subgraph.nodes):
+                    hover_names.append(self._db_idCL_names[node])
+                plotly_graph = plotly_subgraph(default_subgraph, node_in_db, hover_names)
+                
             else:
-                # Find a new subgraph using our existing database subgraph
+                # Multiple leaf nodes require finding the lowest common ancestor
+                # Use custom subgraph function
                 custom_subgraph = subgraph(self._subgraph, leaf_nodes)
-                plotly_graph = plotly_subgraph(custom_subgraph, leaf_nodes)
+                # Check if these were in the database
+                node_in_db = list(set(leaf_nodes) & set(self._db_idCLs))
+                # Find hover names
+                hover_names = []
+                for node in list(custom_subgraph.nodes):
+                    hover_names.append(self._db_idCL_names[node])
+                plotly_graph = plotly_subgraph(custom_subgraph, node_in_db, hover_names)
                 
         return plotly_graph
 
