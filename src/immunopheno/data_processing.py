@@ -1788,7 +1788,7 @@ class ImmunoPhenoData:
                                  p_threshold: float = 0.05,
                                  sig_expr_threshold: float = 0.85,
                                  bg_expr_threshold: float = 0.15,
-                                 bg_cell_z_score: int = -10):
+                                 bg_cell_z_score: int = 10):
         """
         Normalizes all values in a protein matrix
 
@@ -1803,11 +1803,8 @@ class ImmunoPhenoData:
                 the threshold are filtered out
             bg_cell_z_score (int): average protein expression z-score across cells that
                 express the protein
-
-        Returns:
-            normalized_df (pd.DataFrame): dataframe containing normalized
-                protein values
         """
+        bg_cell_z_score = -bg_cell_z_score
         if self._all_fits is None:
             raise EmptyAntibodyFitsError("No fits found for each antibody. Please "
                                          "call fit_all_antibodies() or fit_antibody() first.")
@@ -1911,5 +1908,3 @@ class ImmunoPhenoData:
         self._normalized_counts_df = normalized_df
         self._stvea_normalized_df = normalized_df.copy(deep=True).applymap(
                         lambda x: x + self._stvea_correction_value if x != 0 else x)
-
-        return normalized_df
