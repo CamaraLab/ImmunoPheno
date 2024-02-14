@@ -24,10 +24,10 @@ def _load_adt(protein: str | pd.DataFrame) -> pd.DataFrame:
 
     Parameters:
       protein (str or pd.DataFrame): csv file path or dataframe where:
-        rows = cells, cols = proteins
+        rows = proteins, cols = cells
 
     Returns:
-      protein_df_copy (Pandas DataFrame): 
+      protein_df_copy (Pandas DataFrame):
     """
 
     if isinstance(protein, str):
@@ -37,40 +37,40 @@ def _load_adt(protein: str | pd.DataFrame) -> pd.DataFrame:
 
     return protein_df
 
-def _generate_range(size: int, 
+def _generate_range(size: int,
                    interval_size: int = 2000,
                    start: int = 0) -> list:
     """
     Splits a range of numbers into partitions based on a
     provided interval size. Partitions will only contain
     the begin and end of a range. Ex: [[0, 10], [10, 20]]
-    
+
     Parameters:
         size (int): total size of the range
-        interval_size (int): desired partition sizes 
+        interval_size (int): desired partition sizes
         start (int): index to begin partitioning the range
-    
+
     Returns:
         start_stop_ranges (list): list of lists, containing
             the start and end of a partition.
             ex: [[0, 20], [20, 40], [40, 60]]
     """
-    
+
     if interval_size <= 1:
         raise ValueError("Chunk or partition size must be greater than 1.")
-    
+
     iterable_range = [i for i in range(size + 1)]
 
     end = max(iterable_range)
     step = interval_size
-    
+
     start_stop_ranges = []
-    
-    for i in range(start, end, step): 
-        x = i 
-        start_stop_ranges.append([iterable_range[x:x+step][0], 
+
+    for i in range(start, end, step):
+        x = i
+        start_stop_ranges.append([iterable_range[x:x+step][0],
                                   iterable_range[x:x+step+1][-1]])
-    
+
     return start_stop_ranges
 
 def _read_csv(file_path: str, chunk_range=None):
@@ -80,20 +80,20 @@ def _read_csv(file_path: str, chunk_range=None):
 
     Parameters:
         file_path (str): file path to csv file
-        chunk_range (list): specific rows to parse 
-        
+        chunk_range (list): specific rows to parse
+
     Returns:
         row (generator object): generator containing all/specific
         rows in csv as a list
     """
-    
+
     if chunk_range is not None:
     # Use set for O(1) average lookup
         col_indices = set(range(chunk_range[0], chunk_range[1]))
-        
+
     with open(file_path, "r") as f:
         reader = csv.reader(f)
-        
+
         # Transpose the rows to columns using zip_longest
         transposed_rows = zip_longest(*reader)
 
@@ -112,8 +112,8 @@ def _umi_generator(file_path: str, chunk_range=None):
 
     Parameters:
         file_path (str): file path to csv file
-        chunk_range (list): specific rows to parse 
-    
+        chunk_range (list): specific rows to parse
+
     Returns:
         row (generator object): generator containing UMI counts for
             each gene, for a single cell. Stored as a list
@@ -130,7 +130,7 @@ def _gene_name_generator(file_path: str):
 
     Parameters:
         file_path (str): file path to csv file
-    
+
     Returns:
         row (generator object): generator containing all genes
             for a single cell. Stored as a list
@@ -142,80 +142,80 @@ def _gene_name_generator(file_path: str):
 
 def _clean_chunks(chunk_list: list) -> list:
     """
-    Merges any chunks in a list that only contain one element with 
-    the previous chunk. This is because SingleR requires at least 
+    Merges any chunks in a list that only contain one element with
+    the previous chunk. This is because SingleR requires at least
     two cells at once to run. This may also reduce overhead by
     reducing the number of processes to allocate.
-    
+
     Parameters:
         chunk_list (list): list of lists containing start and end values
-        
+
     Returns:
         chunk_list (list): updated list of lists without any lists
             that contain a single element
     """
     final_chunk = chunk_list[-1]
     size_final_chunk = final_chunk[1] - final_chunk[0]
-    
+
     if size_final_chunk == 1:
         # Update the second to last chunk with the last chunk
         # "Merge" by adding the last chunk to the second to last chunk
         # and delete the last chunk
         chunk_list[-2][1] = chunk_list[-2][1] + 1
         chunk_list.pop()
-        
+
     return chunk_list
 
 def _load_rna_parallel(gene_filepath: str) -> pd.DataFrame:
     """
     Loads in a large RNA csv file using parallelized batch processing.
-    
-    Large RNA dataframes will be divided into large 'chunks', which 
+
+    Large RNA dataframes will be divided into large 'chunks', which
     are divided into smaller 'partitions'.
-    
+
     Chunks will be evaluated sequentially, while partitions inside a chunk
     will be evaluated in parallel as smaller pandas DataFrames.
-    
-    Partitions will be concatenated together at the end to create a 
+
+    Partitions will be concatenated together at the end to create a
     sparse pandas DataFrame.
-    
+
     Parameters:
         gene_filepath (str): csv file path with rows (genes) x columns (cells)
-        
+
     Returns:
         results_df (pd.DataFrame): sparse DataFrame with rows (cells) x columns (genes)
     """
-    
+
     # Create a generator to get all the column names
     rna_data = _read_csv(gene_filepath)
     cell_columns = [next(rna_data, None) for _ in range(1)][0][1:]
-    
+
     # Create a generator to get all gene names
     gene_rows = _gene_name_generator(gene_filepath)
     list_gene_rows = list(gene_rows)
-    
+
     # Default chunk size will be num genes // 2
     chunk_size = len(list_gene_rows) // 2
-    
+
     # Default partition size will be chunk_size // 3
     partition_size = chunk_size // 3
 
     # Generate all the ranges for genes in the dataset
-    gene_ranges = _clean_chunks(_generate_range(len(list_gene_rows) + 1, 
-                                               start=0, 
+    gene_ranges = _clean_chunks(_generate_range(len(list_gene_rows) + 1,
+                                               start=0,
                                                interval_size=chunk_size))
-    
+
     dataframe_chunks = []
-    
+
     def process_section(chunk):
         umi_chunk = _umi_generator(gene_filepath, chunk)
         umi_chunk_df = pd.DataFrame.sparse.from_spmatrix(scipy.sparse.csr_matrix(list(umi_chunk)))
         # return umi_chunk_df.T # less expensive to transpose here compare to the end
         return umi_chunk_df # no transpose, assume user provides cells as rows, ab as columns
-        
+
     for chunk in gene_ranges:
-        partition_ranges = _clean_chunks(_generate_range(chunk[1], 
-                                                       interval_size=partition_size, 
+        partition_ranges = _clean_chunks(_generate_range(chunk[1],
+                                                       interval_size=partition_size,
                                                        start=chunk[0]))
         # Create a multiprocessing pool
         with multiprocess.Pool(processes=multiprocessing.cpu_count()) as pool:
@@ -223,24 +223,24 @@ def _load_rna_parallel(gene_filepath: str) -> pd.DataFrame:
 
         for rna_df in results:
             dataframe_chunks.append(rna_df)
-    
+
     # Combine all DataFrames
     results_df = pd.concat(dataframe_chunks, ignore_index=True, axis=1)
-    
+
     # Add in Index and Columns
     cell_index = pd.Index(cell_columns)
     results_df.set_index(cell_index, inplace=True)
     results_df.columns = list_gene_rows
-    
+
     return results_df
 
 def _load_rna(gene: str | pd.DataFrame) -> pd.DataFrame:
     """
     Loads in RNA data from a CSV or pandas DataFrame
-    
+
     Parameters:
         gene (str or pd.DataFrame): csv file path with rows (genes) x columns (cells)
-    
+
     Returns:
         rna_df (pd.DataFrame): RNA dataframe with rows (cells) x columns (genes)
     """
@@ -249,17 +249,16 @@ def _load_rna(gene: str | pd.DataFrame) -> pd.DataFrame:
     if isinstance(gene, str):
         # If the number of cells is <= 20k, we can use pandas directly to load
         # Create a generator to get all the column names
-        # rna_data = _read_csv(gene)
-        # cell_columns = [next(rna_data, None) for _ in range(1)][0][1:]
-        
-        # if len(cell_columns) <= 20000:
-        #     # rna_df = pd.read_csv(gene_filepath, sep=",", index_col=[0]).T
-        #     rna_df = pd.read_csv(gene, sep=",", index_col=[0]) # assume user provides cells as rows
-        
-        # # Otherwise, load in parallel
-        # else:
-        #     rna_df = _load_rna_parallel(gene)
-        rna_df = pd.read_csv(gene, sep=",", index_col=[0]) # assume user provides cells as rows
+        rna_data = _read_csv(gene)
+        cell_columns = [next(rna_data, None) for _ in range(1)][0][1:]
+
+        if len(cell_columns) <= 20000:
+            # rna_df = pd.read_csv(gene_filepath, sep=",", index_col=[0]).T
+            rna_df = pd.read_csv(gene, sep=",", index_col=[0]) # assume user provides cells as rows
+
+        # Otherwise, load in parallel
+        else:
+            rna_df = _load_rna_parallel(gene)
 
     else:
         rna_df = gene
@@ -270,15 +269,15 @@ def _singleR_rna(rna: pd.DataFrame) -> pd.DataFrame:
     """
     Filters out genes (columns) that are used when
     running SingleR
-    
+
     Parameters:
         rna (pd.DataFrame): RNA dataframe
-        
+
     Returns:
         Pandas dataframe with columns only found in the
-        Human Primary Cell Atlas (SingleR) 
+        Human Primary Cell Atlas (SingleR)
     """
-    
+
     # Retrieve list of genes used in SingleR
     # We will filter out unused genes from the RNA dataset that are not in that list
     hpca_genes_path = str(files('immunopheno.data').joinpath('hpca_genes.txt'))
@@ -289,13 +288,13 @@ def _singleR_rna(rna: pd.DataFrame) -> pd.DataFrame:
 
 def _read_antibodies(csv_file: str) -> list:
     """
-    Parses a spreadsheet containing antibody IDs 
+    Parses a spreadsheet containing antibody IDs
 
     Parameters:
         csv_file (str): name of csv file containing antibody names
-    
+
     Returns:
-        antibodies (list): list of tuples with ab_name and antibody ids 
+        antibodies (list): list of tuples with ab_name and antibody ids
         ex: [("CD4", "AB_XXXXXXX"), ("CD5", "AB_XXXXXXX"))
     """
     antibodies = []
@@ -304,37 +303,37 @@ def _read_antibodies(csv_file: str) -> list:
         lines = csv_file.readlines()
         num_lines = len(lines)
         ab_index = (lines.index('Antibody table:,\n') + 1)
-        
+
         while ab_index < num_lines:
             ab = lines[ab_index].strip().split(",", maxsplit=1)
             ab_name_strip = ab[0].strip()
             ab_id_strip = ab[1].strip()
             antibodies.append([ab_name_strip, ab_id_strip])
             ab_index += 1
-    
+
     return antibodies
 
 def _filter_antibodies(protein_matrix: pd.DataFrame,
                        csv_file: str) -> pd.DataFrame:
     """
-    Filters ADT protein table using only antibodies found in 
+    Filters ADT protein table using only antibodies found in
     a user-provided spreadsheet. Used for uploads to database
-    
+
     Parameters:
-        protein_matrix (pd.DataFrame): protein data 
+        protein_matrix (pd.DataFrame): protein data
         csv_file (str): file path to provided spreadsheet
-    
+
     Returns:
         filt_df (pd.DataFrame): dataframe containing rows
             that reflect antibodies listed in the spreadsheet
     """
-    
+
     antibody_pairs = _read_antibodies(csv_file)
     antibodies_list = [ab[0] for ab in antibody_pairs]
 
     # Subset the columns in the dataframe that are in our spreadsheet
     filt_df = protein_matrix.T.loc[antibodies_list]
-    
+
     return filt_df.T
 
 def _load_labels(labels: str | pd.DataFrame) -> pd.DataFrame:
@@ -344,7 +343,7 @@ def _load_labels(labels: str | pd.DataFrame) -> pd.DataFrame:
 
     Parameters:
         cell_label_df (Pandas DataFrame): cell types, rows = cells, col = types
-    
+
     Returns:
         cell_label_modified (Pandas DataFrame): cell types with only one column
     """
@@ -359,7 +358,7 @@ def _load_labels(labels: str | pd.DataFrame) -> pd.DataFrame:
                                     inplace=True)
     else:
         cell_label_modified = labels
-        
+
     return cell_label_modified
 
 def _log_transform(d_vect: list,
@@ -370,7 +369,7 @@ def _log_transform(d_vect: list,
     Parameters:
         d_vect (list): raw counts from protein data
         scale (int): transformation scale value (optional)
-    
+
     Returns:
         data_array: log-transformed counts
     """
@@ -386,7 +385,7 @@ def _arcsinh_transform(d_vect: list,
     Parameters:
         d_vect (list): raw counts from protein data
         scale (int): transformation scale value (optional)
-    
+
     Returns:
         data_array: arcsinh-transformed counts
     """
@@ -402,7 +401,7 @@ def _conv_np_mode(n: float,
     Parameters:
         n (float): shape parameter used in Negative Binomial
         p (float): shape parameter used in Negative Binomial
-    
+
     Returns:
         mode (float): mode of mixture model
     """
@@ -421,24 +420,24 @@ def _find_background_comp(fit_results: dict) -> int:
     Parameters:
         fit_results (dict): optimization results for an antibody, containing
             three mixture models and their respective parameter results
-            Example: 
+            Example:
                 {3: {},
                  2: {},
                  1: {}}
 
     Returns:
-        background_component (int): index of the background component in 
+        background_component (int): index of the background component in
             a mixture model.
             Example:
                 0 = 1st component
                 1 = 2nd component
                 2 = 3rd component
     """
-    
+
     best_num_comp = next(iter(fit_results.items()))[0]
     mix_model = next(iter(fit_results.items()))[1]
 
-    # Check if results is from Negative Binomial or Gaussian 
+    # Check if results is from Negative Binomial or Gaussian
     if mix_model['model'] == 'negative binomial (MLE)':
         component_means_nb = []
 
@@ -456,12 +455,12 @@ def _find_background_comp(fit_results: dict) -> int:
     elif mix_model['model'] == 'gaussian (EM)':
         gmm_means = mix_model['gmm_means']
         background_component = gmm_means.index(min(gmm_means))
-        
+
     return background_component
 
 def _classify_cells(fit_results: dict,
-                    data_vector: list, 
-                    bg_comp: int, 
+                    data_vector: list,
+                    bg_comp: int,
                     epsilon: float = 0.5) -> list:
     """
     Classifies cells as either background or signal for a single antibody
@@ -472,7 +471,7 @@ def _classify_cells(fit_results: dict,
         data_vector (list): raw counts from protein data
         bg_comp (int): integer representing background component
         epsilon (float): adjustable value added to probabilities of signal cells
-    
+
     Returns:
         classified_cells (list): list of cells, with "0" indicating background
             cell and "1" indicating signal cell
@@ -495,8 +494,8 @@ def _classify_cells(fit_results: dict,
         component_list.remove(bg_comp)
 
         # comp1 will be the background component
-        comp1_probs = ss.nbinom.pmf(range(int(max(data_vector)) + 1), 
-                                    bg_n, 
+        comp1_probs = ss.nbinom.pmf(range(int(max(data_vector)) + 1),
+                                    bg_n,
                                     bg_p)
 
         # find the mode of the fitted background component
@@ -505,19 +504,19 @@ def _classify_cells(fit_results: dict,
         if best_num_mix == 3:
             comp2_index = component_list.pop(0)
             comp2_probs = ss.nbinom.pmf(range(int(max(data_vector)) + 1),
-                                        n_params[comp2_index], 
+                                        n_params[comp2_index],
                                         p_params[comp2_index])
 
             comp3_index = component_list.pop(0)
-            comp3_probs = ss.nbinom.pmf(range(int(max(data_vector)) + 1), 
-                                        n_params[comp3_index], 
+            comp3_probs = ss.nbinom.pmf(range(int(max(data_vector)) + 1),
+                                        n_params[comp3_index],
                                         p_params[comp3_index])
         elif best_num_mix == 2:
             comp2_index = component_list.pop(0)
-            comp2_probs = ss.nbinom.pmf(range(int(max(data_vector)) + 1), 
-                                        n_params[comp2_index], 
+            comp2_probs = ss.nbinom.pmf(range(int(max(data_vector)) + 1),
+                                        n_params[comp2_index],
                                         p_params[comp2_index])
-        
+
         # Iterate over each cell value for an antibody
         for cell in data_vector:
             # Convert to int
@@ -539,7 +538,7 @@ def _classify_cells(fit_results: dict,
                 comp2_cell_prob = comp2_probs[cell] + (0.5 - epsilon)
 
                 cell_probs = [comp1_cell_prob, comp2_cell_prob]
-                
+
                 if max(cell_probs) == comp1_cell_prob or cell < comp1_mode:
                     classified_cells.append(0)
                 else:
@@ -556,7 +555,7 @@ def _classify_cells(fit_results: dict,
         bg_stdev = gmm_stdevs[bg_comp]
 
         component_list.remove(bg_comp)
-        
+
         # mode of background will be equal to the mean
         comp1_mode = bg_mean
 
@@ -564,7 +563,7 @@ def _classify_cells(fit_results: dict,
             comp2_index = component_list.pop(0)
             comp2_mean = gmm_means[comp2_index]
             comp2_stdev = gmm_stdevs[comp2_index]
-            
+
             comp3_index = component_list.pop(0)
             comp3_mean = gmm_means[comp3_index]
             comp3_stdev = gmm_stdevs[comp3_index]
@@ -572,10 +571,10 @@ def _classify_cells(fit_results: dict,
             comp2_index = component_list.pop(0)
             comp2_mean = gmm_means[comp2_index]
             comp2_stdev = gmm_stdevs[comp2_index]
-            
+
         # Iterate over each cell value for an antibody
         for cell in data_vector:
-            # Convert to int 
+            # Convert to int
             cell = int(cell)
 
             if best_num_mix == 3:
@@ -590,7 +589,7 @@ def _classify_cells(fit_results: dict,
                                               comp3_stdev) + (0.5 - epsilon)
 
                 cell_probs = [comp1_cell_prob, comp2_cell_prob, comp3_cell_prob]
-                
+
                 if max(cell_probs) == comp1_cell_prob or cell < comp1_mode:
                     classified_cells.append(0)
                 else:
@@ -603,7 +602,7 @@ def _classify_cells(fit_results: dict,
                                               comp2_mean,
                                               comp2_stdev) + (0.5 - epsilon)
                 cell_probs = [comp1_cell_prob, comp2_cell_prob]
-                
+
                 if max(cell_probs) == comp1_cell_prob or cell < comp1_mode:
                     classified_cells.append(0)
                 else:
@@ -613,13 +612,13 @@ def _classify_cells(fit_results: dict,
 
     return classified_cells
 
-def _classify_cells_df(fit_all_results: dict, 
+def _classify_cells_df(fit_all_results: dict,
                        protein_data: pd.DataFrame) -> pd.DataFrame:
     """
     Parameters:
         fit_all_results (dict): optimization results for all antibodies
         protein_data (pd.DataFrame): count matrix containing antibodies x cells
-    
+
     Returns:
         classified_df (pd.DataFrame): Pandas DataFrame containing "0" and "1",
             where "0" represents a background expression of a cell for a given
@@ -629,7 +628,7 @@ def _classify_cells_df(fit_all_results: dict,
     # Storing antibody name with each classified vector of cells
     count_matrix_columns = list(protein_data.columns)
     count_matrix_index = list(protein_data.index)
-    
+
     classified_matrix = []
 
     for index, ab in enumerate(protein_data):
@@ -637,8 +636,8 @@ def _classify_cells_df(fit_all_results: dict,
         ab_background_comp_index = _find_background_comp(fit_all_results[ab])
 
         # Classify cells in vector as either background or signal
-        ab_classified_cells = _classify_cells(fit_all_results[ab], 
-                                              protein_data.loc[:, ab], 
+        ab_classified_cells = _classify_cells(fit_all_results[ab],
+                                              protein_data.loc[:, ab],
                                               ab_background_comp_index)
 
         classified_matrix.append(ab_classified_cells)
@@ -646,8 +645,8 @@ def _classify_cells_df(fit_all_results: dict,
     # Transpose matrix:
     classified_transpose = list(map(list, zip(*classified_matrix)))
 
-    classified_df = pd.DataFrame(classified_transpose, 
-                                 index=count_matrix_index, 
+    classified_df = pd.DataFrame(classified_transpose,
+                                 index=count_matrix_index,
                                  columns=count_matrix_columns)
 
     return classified_df
@@ -656,7 +655,7 @@ def _filter_classified_df(classified_df: pd.DataFrame,
                           sig_threshold: float = 0.85,
                           bg_threshold: float = 0.15) -> pd.DataFrame:
     """
-    Filters out cells that have a total signal expression ratio greater 
+    Filters out cells that have a total signal expression ratio greater
     than a defined threshold
 
     Parameters:
@@ -681,23 +680,23 @@ def _filter_classified_df(classified_df: pd.DataFrame,
     # all_filt = none_filt[(classified_df == 1).sum(axis=1) < num_ab]
 
     # num_filt = num_original_cells - len(all_filt.index)
-    # logging.warning(f" {num_filt} cells with 0% or 100% expression have been " 
+    # logging.warning(f" {num_filt} cells with 0% or 100% expression have been "
     #                 "automatically filtered out.")
 
     # Filter out cells that have a majority expresssing signal (user-defined)
-    filtered_df = classified_df[(((classified_df == 1).sum(axis=1) 
+    filtered_df = classified_df[(((classified_df == 1).sum(axis=1)
                             / num_ab)) <= sig_threshold]
-    
+
     # Filter out cells that have a majority expressing background (user-defined)
     filtered_df = filtered_df[(((filtered_df == 1).sum(axis=1)
                                 / num_ab) >= bg_threshold)]
-    
+
     # Clarifying messages for total number of filtered cells
     additional_filt = len(classified_df.index) - len(filtered_df.index)
     logging.warning(f" {additional_filt} additional cells have been filtered "
                     f"based on {sig_threshold} sig_expr and {bg_threshold} "
                     "bg_expr thresholds.")
-    
+
     # total_filt = num_filt + additional_filt
     total_filt = additional_filt
     logging.warning(f" Total cells filtered: {total_filt}")
@@ -712,29 +711,29 @@ def _filter_count_df(filtered_classified_df: pd.DataFrame,
     calculations
 
     Parameters:
-        filtered_classified_df (pd.DataFrame): DataFrame containing cells 
+        filtered_classified_df (pd.DataFrame): DataFrame containing cells
             that fall below the defined threshold for signal expression
         protein_data (pd.DataFrame): count matrix containing antibodies x cells
 
     Returns:
-        Filtered protein count matrix 
+        Filtered protein count matrix
     """
     return protein_data.loc[filtered_classified_df.index]
 
 def _filter_cell_labels(filtered_classified_df: pd.DataFrame,
                         cell_label_df: pd.DataFrame) -> pd.DataFrame:
     """
-    Filters out cells from cell labels for single-cell data that were 
+    Filters out cells from cell labels for single-cell data that were
     previously filtered out in classified_df
-    
+
     Parameters:
-        filtered_classified_df (pd.DataFrame): DataFrame containing cells 
+        filtered_classified_df (pd.DataFrame): DataFrame containing cells
             that fall below the defined threshold for signal expression
         cell_label_df (pd.DataFrame): DataFrame containing
             cell labels for each cell (cell x cell label)
 
     Returns:
-        Filtered cell label DataFrame 
+        Filtered cell label DataFrame
     """
     return cell_label_df.loc[filtered_classified_df.index]
 
@@ -760,13 +759,13 @@ def _z_scores(fit_results: dict,
 
     # Classify cells as either background or signal
     classified_cells = _classify_cells(fit_results=fit_results,
-                                      data_vector=data_vector, 
+                                      data_vector=data_vector,
                                       bg_comp=background_comp_index)
 
     # Find all background cells in data vector
-    background_counts = [val 
-                         for val, matrix_status 
-                         in zip(data_vector, classified_cells) 
+    background_counts = [val
+                         for val, matrix_status
+                         in zip(data_vector, classified_cells)
                          if matrix_status == 0]
 
     # Find mean of background cells ( for z score calculation)
@@ -779,34 +778,34 @@ def _z_scores(fit_results: dict,
     for count in data_vector:
         z_score = (count - background_mean) / background_stdev
         z_scores.append(z_score)
-    
+
     return z_scores
 
 def _z_scores_df(fit_all_results: dict,
                  protein_data: pd.DataFrame) -> pd.DataFrame:
     """
-    Calculates the z scores for all cells for a set of antibodies. Further 
+    Calculates the z scores for all cells for a set of antibodies. Further
     filtering for only background z scores will be required. This will have
     already excluded the cells that fell above an expression threshold.
 
     Parameters:
         fit_all_results (dict): optimization results for all antibodies
         protein_data (pd.DataFrame): count matrix containing antibodies x cells
-    
+
     Returns:
         z_score_df (pd.DataFrame): all count values in protein_data converted
             into z scores
     """
-    
+
     # Storing ab name with each classified vector of cells
     count_matrix_columns = list(protein_data.columns)
     count_matrix_index = list(protein_data.index)
-    
+
     z_score_matrix = []
 
     for index, ab in enumerate(protein_data):
         # Classify cells in vector as either background or signal
-        z_score_vector = _z_scores(fit_all_results[ab], 
+        z_score_vector = _z_scores(fit_all_results[ab],
                                   protein_data.loc[:, ab])
 
         z_score_matrix.append(z_score_vector)
@@ -817,10 +816,10 @@ def _z_scores_df(fit_all_results: dict,
     z_score_df = pd.DataFrame(z_score_transpose,
                               index=count_matrix_index,
                               columns=count_matrix_columns)
-    
+
     return z_score_df
 
-def _bg_z_scores_df(classified_df: pd.DataFrame, 
+def _bg_z_scores_df(classified_df: pd.DataFrame,
                     z_scores_df: pd.DataFrame) -> pd.DataFrame:
     """
     Retrieves only the z scores for background cells
@@ -828,7 +827,7 @@ def _bg_z_scores_df(classified_df: pd.DataFrame,
     Parameters:
         classified_df (pd.DataFrame): Pandas DataFrame containing "0" and "1",
             where "0" represents a background expression of a cell for a given
-            antibody, and "1" represents a antibody-specific signal expression 
+            antibody, and "1" represents a antibody-specific signal expression
         z_scores_df (pd.DataFrame): all count values converted into z scores
             using mean and standard deviation of the background cells
 
@@ -871,7 +870,7 @@ def _z_avg_umi_sum_by_type(bg_z_score_df: pd.DataFrame,
                            rna_counts_df: pd.DataFrame,
                            labels_filt_df: pd.DataFrame) -> dict:
     """
-    Returns a dictionary that sorts cells by cell type along with 
+    Returns a dictionary that sorts cells by cell type along with
     their z score averages and total UMIs
 
     Parameters:
@@ -880,25 +879,25 @@ def _z_avg_umi_sum_by_type(bg_z_score_df: pd.DataFrame,
         rna_counts_df (pd.DataFrame): UMI counts for each cell (RNA data)
         labels_filt_df (pd.DataFrame): cells and their cell type
     Returns:
-        df_by_type_dict (dict): dictionary containing keys as cell type and 
-            values as a dataframe consisting of z score averages and total UMIs 
+        df_by_type_dict (dict): dictionary containing keys as cell type and
+            values as a dataframe consisting of z score averages and total UMIs
             for all cells for that cell type
     """
- 
+
     df_by_type = []
     df_by_type_dict = {}
 
     z_umi_df = pd.DataFrame(columns=['z_score_avg', 'total_umi'])
     z_umi_df['z_score_avg'] = bg_z_score_df.mean(axis=1)
     z_umi_df['total_umi'] = rna_counts_df.loc[z_umi_df.index].sum(axis=1)
-    
+
     # Add the list of types into the z_umi_df
     z_umi_df['type'] = list(labels_filt_df.iloc[:, 0])
-    
+
     # Filter cells that contain any NA values in their z scores average
     # z_umi_clean = z_umi_df.dropna() # don't do it here! do it when we actually call lin_reg
 
-    # Find all cell types 
+    # Find all cell types
     unique_cell_types = list(set(labels_filt_df.iloc[:, 0]))
 
     # Separate all cells out by cell type
@@ -912,22 +911,22 @@ def _z_avg_umi_sum_by_type(bg_z_score_df: pd.DataFrame,
 def _linear_reg(z_umi: pd.DataFrame) -> pd.DataFrame:
     """
     Performs linear regression using z score averages and the log values
-    of the total UMIs 
+    of the total UMIs
 
     Parameters:
         z_umi (pd.DataFrame): DataFrame containing z score averages and total
             UMIs of cells
-    
+
     Returns:
-        lin_reg_df (pd.DataFrame): DataFrame containing the predicted z scores, 
-            residuals, and p-values for each cell 
+        lin_reg_df (pd.DataFrame): DataFrame containing the predicted z scores,
+            residuals, and p-values for each cell
     """
 
     # The final predicted values
     lin_reg_df = z_umi.copy(deep=True)
     z_umi_og_x = np.log(z_umi['total_umi'].values)
     z_umi_og_y = z_umi['z_score_avg']
-    
+
     # Filter out any cells (rows) containing NAs that would have caused
     # the Linear Regression to crash.
     # This is ONLY for the purpose of creating the Linear Regression model
@@ -967,15 +966,15 @@ def _linear_reg_by_type(df_by_type_dict: dict) -> dict:
     Performs linear regression on cells separated by cell type
 
     Parameters:
-        df_by_type_dict: dictionary containing keys as cell type and 
-            values as a dataframe consisting of z score averages and total UMIs 
+        df_by_type_dict: dictionary containing keys as cell type and
+            values as a dataframe consisting of z score averages and total UMIs
             for all cells for that cell type
             Example:
             {
                 1: {dataframe},
                 2: {dataframe} ...
             }
-    
+
     Returns:
         lin_reg_by_type_dict (dict): dictionary containing keys as cell type
             and values as a dataframe consisting of results from linear
@@ -992,7 +991,7 @@ def _linear_reg_by_type(df_by_type_dict: dict) -> dict:
         else:
             temp_lin_reg = _linear_reg(df)
             lin_reg_by_type_dict[cell_type] = temp_lin_reg
-    
+
     return lin_reg_by_type_dict
 
 def _get_cell_type(cell: str,
@@ -1010,7 +1009,7 @@ def _get_cell_type(cell: str,
     """
 
     cell_type = cell_labels_filt_df.loc[cell].values[0]
-    
+
     return cell_type
 
 def _bg_mean_std(fit_results) -> tuple:
@@ -1019,7 +1018,7 @@ def _bg_mean_std(fit_results) -> tuple:
 
     Parameters:
         fit_results (dict): optimization results for an antibody
-    
+
     Returns:
         mean (float): mean value of the background component
         std (float): standard deviation of the background component
@@ -1027,7 +1026,7 @@ def _bg_mean_std(fit_results) -> tuple:
 
     # Find background component
     background_component = _find_background_comp(fit_results)
-    
+
     # Retrieve n and p parameters for all components in mix_model
     mix_model = next(iter(fit_results.items()))[1]
 
@@ -1035,7 +1034,7 @@ def _bg_mean_std(fit_results) -> tuple:
 
         n_params = mix_model['nb_n_params']
         p_params = mix_model['nb_p_params']
-    
+
         # For the mix_model, find the background component's parameters
         bg_n = n_params[background_component]
         bg_p = p_params[background_component]
@@ -1069,7 +1068,7 @@ def _correlation_ab(classified_df: pd.DataFrame,
         correlation_df (pd.DataFrame): DataFrame containing pearson's correlation
             coefficients for each pair of antibodies
     """
-   
+
     classified_transpose = classified_df.copy(deep=True).T
     z_transpose = z_scores_df.copy(deep=True).T
 
@@ -1087,7 +1086,7 @@ def _correlation_ab(classified_df: pd.DataFrame,
 
     for i in range(0, num_ab):
         for j in range(i + 1, num_ab):
-          
+
             ab_a_zscores = []
             ab_b_zscores = []
 
@@ -1119,18 +1118,18 @@ def _correlation_ab(classified_df: pd.DataFrame,
             correlation_matrix[i][i] = 1
             correlation_matrix[i + 1][i + 1] = 1
 
-    correlation_df = pd.DataFrame(correlation_matrix, 
-                                  index=ab_names, 
+    correlation_df = pd.DataFrame(correlation_matrix,
+                                  index=ab_names,
                                   columns=ab_names)
     return correlation_df
 
-def _normalize_antibody(fit_results: dict, 
-                        data_vector: pd.Series, 
-                        ab_name: str, 
+def _normalize_antibody(fit_results: dict,
+                        data_vector: pd.Series,
+                        ab_name: str,
                         p_threshold: float = 0.05,
-                        background_cell_z_score = -10, 
+                        background_cell_z_score = -10,
                         classified_filt_df: pd.DataFrame = None,
-                        cell_labels_filt_df: pd.DataFrame = None, 
+                        cell_labels_filt_df: pd.DataFrame = None,
                         lin_reg_dict: dict = None,
                         lin_reg: pd.DataFrame = None) -> list:
         """
@@ -1139,17 +1138,17 @@ def _normalize_antibody(fit_results: dict,
         Parameters:
             fit_results (dict): optimization results for an antibody, containing
                 three mixture models and their respective parameter results
-            data_vector (pd.Series): raw ADT values from protein data 
+            data_vector (pd.Series): raw ADT values from protein data
             ab_name (str): name of antibody
             p_threshold (float): threshold for p value rejection
             background_cell_z_score (int): z-score value for background cells
                 when computing a z-score table for all normalized counts
-            classified_filt_df (pd.DataFrame): contains classification for 
+            classified_filt_df (pd.DataFrame): contains classification for
                 all cells except those filtered by expression level
             cell_labels_filt_df (pd.DataFrame): contains cell
                 labels for all cells except those filtered by expression level
             lin_reg_dict (dict): results of linear regression separated by
-                cell type 
+                cell type
             lin_reg (pd.DataFrame): results of linear regression without
                 separating by cell type
 
@@ -1173,18 +1172,18 @@ def _normalize_antibody(fit_results: dict,
             elif classified_cells[i] == 1:
 
                 # If dealing with flow cytometry data
-                if (cell_labels_filt_df is None 
-                    and lin_reg_dict is None 
+                if (cell_labels_filt_df is None
+                    and lin_reg_dict is None
                     and lin_reg is None):
                     # Apply normalization formula
                     normalized_val = cell_count - background_mean
                     normalized_counts.append(normalized_val)
-                
+
                 # If dealing with single cell data, without cell_labels
-                elif (cell_labels_filt_df is None 
-                      and lin_reg_dict is None 
+                elif (cell_labels_filt_df is None
+                      and lin_reg_dict is None
                       and lin_reg is not None):
-                    
+
                     # If the p_val (lin reg) is < threshold, add to this factor
                     # Otherwise, keep the factor equal to 0
                     factor = 0
@@ -1196,19 +1195,19 @@ def _normalize_antibody(fit_results: dict,
                             factor += predicted
                         else:
                             factor += 0
-                    
+
                     # Apply normalization formula
-                    normalized_val = (cell_count 
-                                - (factor)*background_std 
+                    normalized_val = (cell_count
+                                - (factor)*background_std
                                 - background_mean)
-                    
+
                     normalized_counts.append(normalized_val)
 
                 # If dealing with single cell data, with cell labels
                 elif (cell_labels_filt_df is not None
                       and lin_reg_dict is not None
                       and lin_reg is None):
-                    
+
                     factor = 0
 
                     cell_type = _get_cell_type(cell_name, cell_labels_filt_df)
@@ -1232,12 +1231,12 @@ def _normalize_antibody(fit_results: dict,
                             factor += 0
 
                     # Apply normalization formula
-                    normalized_val = (cell_count 
-                                - (factor)*background_std 
+                    normalized_val = (cell_count
+                                - (factor)*background_std
                                 - background_mean)
-                    
+
                     normalized_counts.append(normalized_val)
-        
+
         norm_signal_counts = [x for x in normalized_counts if x != 0]
 
         if len(norm_signal_counts) < 2:
@@ -1261,7 +1260,7 @@ def _normalize_antibody(fit_results: dict,
                     if temp_z_score < background_cell_z_score:
                         temp_z_score = background_cell_z_score
 
-                        # If we are setting this to the background_cell_z_score, 
+                        # If we are setting this to the background_cell_z_score,
                         # the classification value must also be updated for this cell & antibody
                         # to be 0 (background) instead of 1 (signal)
                         classified_filt_df.at[cell_name, ab_name] = 0
@@ -1269,35 +1268,17 @@ def _normalize_antibody(fit_results: dict,
                     normalized_z_scores.append(temp_z_score)
                 elif count == 0:
                     normalized_z_scores.append(background_cell_z_score)
-            
+
             return normalized_z_scores
 
-def _cumulative_dist(normalized_z_score: float) -> float:
-    """
-    Calculates the cumulative probability for a value
-    in a normal distribution
-
-    Parameters:
-        normalized_z_score (float): z_score of a cell for a given antibody 
-            retrieved from the normalized protein data
-
-    Returns:
-        cdf_value: cumulative probability from a normal distribution
-    """
-
-    # Use standard normal distribution, mean = 0, stdev = 1
-    cdf_value = ss.norm.cdf(normalized_z_score, 0, 1)
-    return cdf_value
-
-def _normalize_antibodies_df(protein_cleaned_filt_df: pd.DataFrame, 
+def _normalize_antibodies_df(protein_cleaned_filt_df: pd.DataFrame,
                              fit_all_results: dict,
                              p_threshold: float = 0.05,
                              background_cell_z_score: int = -10,
-                             classified_filt_df: pd.DataFrame = None, 
-                             cell_labels_filt_df: pd.DataFrame = None, 
+                             classified_filt_df: pd.DataFrame = None,
+                             cell_labels_filt_df: pd.DataFrame = None,
                              lin_reg_dict: dict = None,
-                             lin_reg: pd.DataFrame = None,
-                             cumulative: bool = False) -> pd.DataFrame:
+                             lin_reg: pd.DataFrame = None) -> pd.DataFrame:
     """
     Normalizes all antibodies in a protein dataset
 
@@ -1305,24 +1286,22 @@ def _normalize_antibodies_df(protein_cleaned_filt_df: pd.DataFrame,
         protein_cleaned_filt_df (pd.DataFrame): containing all cells and
             antibodies, except those that have been filtered out based
             on level of expression
-        fit_all_results (dict): list of dictionaries containing 
+        fit_all_results (dict): list of dictionaries containing
             optimization results for each antibody
         p_threshold (float): threshold for p value rejection
         background_cell_z_score (int): z-score value for background cells
             when computing a z-score table for all normalized counts
-        classified_filt_df (pd.DataFrame): contains classification for 
+        classified_filt_df (pd.DataFrame): contains classification for
             all cells except those filtered by expression level
         cell_labels_filt_df (pd.DataFrame): contains cell
             labels for all cells except those filtered by expression level
         lin_reg_dict (dict): results of linear regression separated by
-            cell type 
+            cell type
         lin_reg (pd.DataFrame): results of linear regression without
             separating by cell type
-        cumulative (bool): flag to indicate whether to return the 
-            cumulative distribution probabilities
 
     Returns:
-        normalized_df_transpose (pd.DataFrame): DataFrame containing normalized 
+        normalized_df_transpose (pd.DataFrame): DataFrame containing normalized
             z-score values for all cells in a given antibody
     """
 
@@ -1330,30 +1309,25 @@ def _normalize_antibodies_df(protein_cleaned_filt_df: pd.DataFrame,
 
     for ab_name, counts in tqdm(protein_cleaned_filt_df.items(), total=len(protein_cleaned_filt_df.columns)):
         norm_ab_counts = _normalize_antibody(
-                            fit_results=fit_all_results[ab_name], 
-                            data_vector=counts, 
-                            ab_name=ab_name, 
+                            fit_results=fit_all_results[ab_name],
+                            data_vector=counts,
+                            ab_name=ab_name,
                             p_threshold=p_threshold,
                             background_cell_z_score=background_cell_z_score,
-                            classified_filt_df=classified_filt_df, 
-                            cell_labels_filt_df=cell_labels_filt_df, 
+                            classified_filt_df=classified_filt_df,
+                            cell_labels_filt_df=cell_labels_filt_df,
                             lin_reg_dict=lin_reg_dict,
                             lin_reg=lin_reg)
-        
+
         normalized_list.append(norm_ab_counts)
 
-    normalized_df = pd.DataFrame(normalized_list, 
-                                index=protein_cleaned_filt_df.columns, 
+    normalized_df = pd.DataFrame(normalized_list,
+                                index=protein_cleaned_filt_df.columns,
                                 columns=protein_cleaned_filt_df.index)
-    
+
     # Transpose so the correct row/column labels are put
     normalized_df_transpose = normalized_df.T
 
-    # Generate the cumulative distribution values instead for signal cells
-    if cumulative is True:
-        normalized_df_transpose = normalized_df_transpose.apply(
-            lambda x: x.mask(x != background_cell_z_score, _cumulative_dist))
-        
     if background_cell_z_score < 0:
         normalized_df_transpose = normalized_df_transpose - background_cell_z_score
     else:
@@ -1407,10 +1381,10 @@ class ImmunoPhenoData:
     """
     A class to hold single-cell data (CITE-Seq, etc) and Flow Cytometry data.
     Performs fitting of gaussian/negative binomial mixture models and
-    normalization to antibodies present in a protein dataset. 
+    normalization to antibodies present in a protein dataset.
 
     Parameters:
-        protein_matrix (str or dataframe): file path or dataframe to ADT count matrix 
+        protein_matrix (str or dataframe): file path or dataframe to ADT count matrix
             Where: Row index (cells) x column (antibodies)
         gene_matrix (str): file path or dataframe to UMI count matrix
             Where: Row index (cells) x column (genes)
@@ -1423,14 +1397,14 @@ class ImmunoPhenoData:
             Where: scanpy is an AnnData object containing an 'obs' field
                 Ex: AnnData.obs['scanpy_labels']
     """
-    def __init__(self, 
-                 protein_matrix: str | pd.DataFrame = None, 
+    def __init__(self,
+                 protein_matrix: str | pd.DataFrame = None,
                  gene_matrix: str | pd.DataFrame = None,
                  cell_labels: str | pd.DataFrame = None,
                  spreadsheet: str = None,
                  scanpy: anndata.AnnData = None,
                  scanpy_labels: str = None):
-        
+
         # Raw values
         self._protein_matrix = protein_matrix
         self._gene_matrix = gene_matrix
@@ -1444,18 +1418,17 @@ class ImmunoPhenoData:
         self._temp_gene = None
         self._temp_labels = None
         self._temp_certainties = None
-        
+
         # Calculated values
         self._all_fits = None
         self._all_fits_dict = None
-        self._cumulative = False
         self._normalized_counts_df = None
         self._classified_filt_df = None
         self._cell_labels_filt_df = None
         self._linear_reg_df = None
         self._z_scores_df = None
         self._singleR_rna = None
-        
+
         # Used when sending data to the server for running STvEA
         self._background_cell_z_score = -10
         self._stvea_correction_value = 0
@@ -1468,7 +1441,7 @@ class ImmunoPhenoData:
             protein_df = protein_anndata.to_df(layer="counts")
             self._protein_matrix = protein_df.copy(deep=True)
             self._temp_protein = self._protein_matrix.copy(deep=True)
- 
+
             # Extract and load rna/gene data
             rna_anndata = scanpy[:, scanpy.var["feature_types"] == "Gene Expression"].copy()
             gene_df = rna_anndata.to_df(layer="counts")
@@ -1491,13 +1464,13 @@ class ImmunoPhenoData:
         if protein_matrix is None and scanpy is None:
             raise LoadMatrixError("protein_matrix file path or dataframe must be provided")
 
-        if (protein_matrix is not None and 
-            cell_labels is not None and 
+        if (protein_matrix is not None and
+            cell_labels is not None and
             gene_matrix is None and
             scanpy is None):
             raise LoadMatrixError("gene_matrix file path or dataframe must be present along with "
                                   "cell_labels")
-        
+
         # Single cell
         if self._protein_matrix is not None and self._gene_matrix is not None and scanpy is None:
             self._protein_matrix = _load_adt(self._protein_matrix) # assume user provides cells as rows, ab as col
@@ -1521,10 +1494,10 @@ class ImmunoPhenoData:
             cell_labels = None
 
         # If filtering antibodies using a provided spreadsheet for database uploads
-        if spreadsheet is not None: 
+        if spreadsheet is not None:
             self._protein_matrix = _filter_antibodies(self._protein_matrix, spreadsheet)
             self._temp_protein = self._protein_matrix.copy(deep=True)
-    
+
     @property
     def all_fits_dict(self):
         return self._all_fits_dict
@@ -1536,23 +1509,23 @@ class ImmunoPhenoData:
     @property
     def z_scores(self):
         return self._z_scores_df
-    
+
     @property
     def normalized_counts(self):
         return self._normalized_counts_df
-    
+
     @property
     def protein(self):
         return self._protein_matrix
-    
+
     @protein.setter
     def protein(self, value):
         self._protein_matrix = value
 
-    @property 
+    @property
     def rna(self):
         return self._gene_matrix
-    
+
     @rna.setter
     def rna(self, value):
         self._gene_matrix = value
@@ -1560,11 +1533,11 @@ class ImmunoPhenoData:
     @property
     def norm_cell_labels(self):
         return self._cell_labels_filt_df
-    
+
     @property
     def raw_cell_labels(self):
         return self._cell_labels
-    
+
     @raw_cell_labels.setter
     def raw_cell_labels(self, value):
         self._cell_labels = value
@@ -1572,9 +1545,9 @@ class ImmunoPhenoData:
     @property
     def label_certainties(self):
         return self._label_certainties
-    
+
     @label_certainties.setter
-    def label_certainties(self, value): 
+    def label_certainties(self, value):
         self._label_certainties = value
 
     def reset_index(self):
@@ -1590,7 +1563,7 @@ class ImmunoPhenoData:
     def update_index(self,
                      index: list):
         """
-        Updates the index of cells for each dataframe 
+        Updates the index of cells for each dataframe
         in an ImmunoPhenoData object
 
         Parameters:
@@ -1611,24 +1584,24 @@ class ImmunoPhenoData:
 
         Parameters:
             antibody (str): name of antibody to be removed
-        
+
         """
         # CHECK: Does this antibody exist in the protein data?
         if isinstance(antibody, str):
             try:
                 # Drop column from protein data
                 self._protein_matrix.drop(antibody, axis=1, inplace=True)
-                print(f"Removed {antibody} from protein data.")  
+                print(f"Removed {antibody} from protein data.")
             except:
                 raise AntibodyLookupError(f"'{antibody}' not found in protein data.")
         else:
-            raise AntibodyLookupError("Antibody must be a string")  
+            raise AntibodyLookupError("Antibody must be a string")
 
         # CHECK: Does this antibody have a fit?
         if self._all_fits_dict != None and antibody in self._all_fits_dict:
             self._all_fits_dict.pop(antibody)
             print(f"Removed {antibody} fits.")
-    
+
     def select_mixture_model(self,
                              antibody: str,
                              mixture: int):
@@ -1677,16 +1650,16 @@ class ImmunoPhenoData:
         """
         Fits a mixture model to an antibody and returns its optimal parameters
         Can be called after fit_all_antibodies to replace a fit for a particular
-        antibody or to fit an antibody one by one. 
+        antibody or to fit an antibody one by one.
 
         Parameters:
             input (list/str): raw values from protein data or antibody name
-            transform_type (str): type of transformation. "log" or "arcsinh" 
+            transform_type (str): type of transformation. "log" or "arcsinh"
             transform_scale (int): multiplier applied during transformation
             model (str): type of model to fit. "gaussian" or "nb"
             plot (bool): option to plot each model
             **kwargs: initial arguments for sklearn's GaussianMixture (optional)
-            
+
         Returns:
             gauss_params/nb_params (dict): results from optimization
         """
@@ -1695,14 +1668,14 @@ class ImmunoPhenoData:
         if model != 'nb' and model != 'gaussian':
             raise InvalidModelError(("Invalid model. Please choose 'gaussian' or 'nb'. "
                                     "Default: 'gaussian'."))
-            
+
         if model == 'nb' and len(kwargs) > 0:
             raise ExtraArgumentsError("additional kwargs can only be used for 'gaussian'.")
 
         if transform_scale != 1 and transform_type is None:
             raise TransformTypeError("transform_type must be chosen to use "
                                   "transform_scale. choose 'log' or 'arcsinh'.")
-            
+
         if isinstance(transform_scale, int) == False:
             raise TransformScaleError("'transform_scale' must be an integer value.")
 
@@ -1716,24 +1689,24 @@ class ImmunoPhenoData:
                 self._all_fits_dict[ab] = None
 
         # Indicate whether this function call is for individual fitting
-        individual = False 
+        individual = False
 
-        # Fitting a single antibody using its name 
+        # Fitting a single antibody using its name
         if isinstance(input, str):
             # if input in self._protein_matrix.columns:
             try:
                 data_vector = list(self._protein_matrix.loc[:, input].values)
                 # Also set ab_name to input, since input is the string of the antibody
                 ab_name = input
-                individual = True   
+                individual = True
             except:
-                raise AntibodyLookupError(f"'{input}' not found in protein data.")   
+                raise AntibodyLookupError(f"'{input}' not found in protein data.")
         # Fitting all antibodies at once
         else:
             data_vector = input
 
 
-        if transform_type is not None:     
+        if transform_type is not None:
             if transform_type == 'log':
                 data_vector = _log_transform(d_vect=data_vector,
                                             scale=transform_scale)
@@ -1746,11 +1719,11 @@ class ImmunoPhenoData:
                 raise TransformTypeError(("Invalid transformation type. " 
                                           "Please choose 'log' or 'arcsinh'. "
                                           "Default: None."))
-            
+
         if model == 'gaussian':
             gauss_params = _gmm_results(counts=data_vector,
-                                        ab_name=ab_name, 
-                                        plot=plot, 
+                                        ab_name=ab_name,
+                                        plot=plot,
                                         **kwargs)
 
             # Check if a params already exists in dict
@@ -1772,25 +1745,25 @@ class ImmunoPhenoData:
             if individual:
                 self._all_fits_dict[input] = nb_params
                 self._all_fits = list(filter(None, self._all_fits_dict.values()))
-            
+
             return nb_params
-    
+
     def fit_all_antibodies(self,
                            transform_type: str = None,
                            transform_scale: int = 1,
                            model: str = 'gaussian',
-                           plot: bool = False, 
+                           plot: bool = False,
                            **kwargs) -> list:
         """
         Applies fit_antibody to each antibody in the protein count matrix
 
         Parameters:
             protein_data (pd.DataFrame): count matrix containing antibodies x cells
-            transform_type (str): type of transformation. "log" or "arcsinh" 
+            transform_type (str): type of transformation. "log" or "arcsinh"
             transform_scale (int): multiplier applied during transformation
             model (str): type of model to fit. "gaussian" or "nb"
             plot (bool): option to plot each model
-            **kwargs: initial arguments for sklearn's GaussianMixture (optional) 
+            **kwargs: initial arguments for sklearn's GaussianMixture (optional)
         """
 
         fit_all_results = []
@@ -1798,10 +1771,10 @@ class ImmunoPhenoData:
         for ab in tqdm(self._protein_matrix, total=len(self._protein_matrix.columns)):
             # if plot: # Print antibody name if plotting
                 # print("Antibody:", ab)
-            fits = self.fit_antibody(input=self._protein_matrix.loc[:, ab], 
+            fits = self.fit_antibody(input=self._protein_matrix.loc[:, ab],
                                     ab_name=ab,
                                     transform_type=transform_type,
-                                    transform_scale=transform_scale, 
+                                    transform_scale=transform_scale,
                                     model=model,
                                     plot=plot,
                                     **kwargs)
@@ -1815,8 +1788,7 @@ class ImmunoPhenoData:
                                  p_threshold: float = 0.05,
                                  sig_expr_threshold: float = 0.85,
                                  bg_expr_threshold: float = 0.15,
-                                 bg_cell_z_score: int = -10,
-                                 cumulative: bool = False) -> pd.DataFrame:
+                                 bg_cell_z_score: int = -10):
         """
         Normalizes all values in a protein matrix
 
@@ -1829,29 +1801,27 @@ class ImmunoPhenoData:
                 filtering cells that have a low signal expression rate
             bg_cell_z_score (int): z-score value for background cells
                 when computing a z-score table for all normalized counts
-            cumulative (bool): flag to indicate whether to return the 
-                cumulative distribution probabilities
 
         Returns:
-            normalized_df (pd.DataFrame): dataframe containing normalized 
+            normalized_df (pd.DataFrame): dataframe containing normalized
                 protein values
         """
         if self._all_fits is None:
             raise EmptyAntibodyFitsError("No fits found for each antibody. Please "
                                          "call fit_all_antibodies() or fit_antibody() first.")
-        
+
         if None in self._all_fits_dict.values():
             raise IncompleteAntibodyFitsError("All antibodies must be fit before normalizing. "
                                               "call fit_all_antibodies() or fit_antibody() for "
-                                              "each antibody.") 
-        
+                                              "each antibody.")
+
         all_fits = self._all_fits_dict
 
         if (not 0 <= p_threshold <= 1 or
             not 0 <= sig_expr_threshold <= 1 or
             not 0 <= bg_expr_threshold <= 1):
             raise BoundsThresholdError("threshold must lie between 0 and 1 (inclusive)")
-        
+
         if not bg_cell_z_score < 0:
             raise BackgroundZScoreError("bg_cell_z_score must be less than 0")
 
@@ -1860,18 +1830,18 @@ class ImmunoPhenoData:
         classified_cells = _classify_cells_df(all_fits, self._protein_matrix)
 
         # Filter out cells that have a high signal: background ratio (default: 1.0)
-        classified_cells_filt = _filter_classified_df(classified_cells, 
+        classified_cells_filt = _filter_classified_df(classified_cells,
                                                     sig_threshold=sig_expr_threshold,
                                                     bg_threshold=bg_expr_threshold)
         self._classified_filt_df = classified_cells_filt
 
         # Filter the same cells from the protein data
-        protein_cleaned_filt = _filter_count_df(classified_cells_filt, 
+        protein_cleaned_filt = _filter_count_df(classified_cells_filt,
                                                 self._protein_matrix)
-        
+
         # Filter from cell labels if dealing with single cell data
         if self._cell_labels is not None:
-            cell_labels_filt = _filter_cell_labels(classified_cells_filt, 
+            cell_labels_filt = _filter_cell_labels(classified_cells_filt,
                                                         self._cell_labels)
             self._cell_labels_filt_df = cell_labels_filt
 
@@ -1881,9 +1851,6 @@ class ImmunoPhenoData:
 
         # Extract z scores for background cells
         background_z_scores = _bg_z_scores_df(classified_cells_filt, z_scores)
-
-        # Set cumulative flag
-        self._cumulative = cumulative
 
         # Set the background cell z score to the class attribute (for STvEA)
         self._background_cell_z_score = bg_cell_z_score
@@ -1900,21 +1867,20 @@ class ImmunoPhenoData:
             df_by_type = _z_avg_umi_sum_by_type(background_z_scores,
                                                 self._gene_matrix,
                                                 cell_labels_filt)
-            
+
             lin_reg_type = _linear_reg_by_type(df_by_type)
             self._linear_reg_df = lin_reg_type
 
             # Normalize all protein values
             normalized_df = _normalize_antibodies_df(
-                                    protein_cleaned_filt_df=protein_cleaned_filt, 
+                                    protein_cleaned_filt_df=protein_cleaned_filt,
                                     fit_all_results=all_fits,
                                     p_threshold=p_threshold,
                                     background_cell_z_score=bg_cell_z_score,
-                                    classified_filt_df=classified_cells_filt, 
-                                    cell_labels_filt_df=cell_labels_filt, 
-                                    lin_reg_dict=lin_reg_type,
-                                    cumulative=cumulative)
-        
+                                    classified_filt_df=classified_cells_filt,
+                                    cell_labels_filt_df=cell_labels_filt,
+                                    lin_reg_dict=lin_reg_type)
+
         # If dealing with single cell data WITHOUT cell labels:
         # Run linear regression to regress out only size
         elif self._gene_matrix is not None and self._cell_labels is None:
@@ -1923,24 +1889,22 @@ class ImmunoPhenoData:
 
             # Normalize all protein values
             normalized_df = _normalize_antibodies_df(
-                                    protein_cleaned_filt_df=protein_cleaned_filt, 
+                                    protein_cleaned_filt_df=protein_cleaned_filt,
                                     fit_all_results=all_fits,
                                     p_threshold=p_threshold,
                                     background_cell_z_score=bg_cell_z_score,
                                     classified_filt_df=classified_cells_filt,
-                                    lin_reg=lin_reg,
-                                    cumulative=cumulative)
+                                    lin_reg=lin_reg)
 
         # Else, normalize values for flow cytometry data
         else:
             # Normalize all values in the protein matrix
             normalized_df = _normalize_antibodies_df(
-                                    protein_cleaned_filt_df=protein_cleaned_filt, 
+                                    protein_cleaned_filt_df=protein_cleaned_filt,
                                     fit_all_results=all_fits,
                                     p_threshold=p_threshold,
                                     background_cell_z_score=bg_cell_z_score,
-                                    classified_filt_df=classified_cells_filt,
-                                    cumulative=cumulative)
+                                    classified_filt_df=classified_cells_filt)
         
         self._normalized_counts_df = normalized_df
         self._stvea_normalized_df = normalized_df.copy(deep=True).applymap(
