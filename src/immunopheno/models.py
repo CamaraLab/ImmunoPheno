@@ -59,9 +59,10 @@ def _find_background_comp(fit_results: dict) -> int:
         
     return background_component
 
-def plot_fits(counts:list,
-              fit_results:dict,
-              ab_name:str):
+def plot_fits(counts: list,
+              fit_results: dict,
+              ab_name: str,
+              width: int = None):
     """
     Plots the fits of the mixture model for an antibody
 
@@ -69,13 +70,13 @@ def plot_fits(counts:list,
         counts (list): count values of cells for an antibody
         fit_results (dict): optimization results of a mixture model
         ab_name (str): name of antibody
+        width (int): display width of all the graphs (optional)
     
     Returns:
         Plotly graph containing a histogram of the counts and the plots
         containing the individual components of each model
     """
     
-    # Convert to int
     countsMax = int(max(counts))
     
     # Make initial subplots 
@@ -99,6 +100,9 @@ def plot_fits(counts:list,
     
     # AICs in order of 1 mixture, 2 mixtures, 3 mixtures
     aics = []
+
+    # Adjusted Y axis max
+    y_axis_max = 0
         
     for key, value in sorted(fit_results.items()):
         if value["model"] == 'negative binomial (MLE)':
@@ -123,6 +127,22 @@ def plot_fits(counts:list,
                 fig.add_trace(trace1a.data[0], row=1, col=1)
             
             if value["num_comp"] == 2:
+                # Find a weighted average of each component maximum for Y axis scale
+                component_maximums = []
+                first_max = max(nb_thetas[0]
+                                 * (ss.nbinom.pmf(range(countsMax),
+                                                  nb_n_params[0],
+                                                  nb_p_params[0])))
+                second_max = max((1 - nb_thetas[0])
+                                 * (ss.nbinom.pmf(range(countsMax),
+                                                  nb_n_params[1],
+                                                  nb_p_params[1])))
+                component_maximums.append(first_max)
+                component_maximums.append(second_max)
+
+                # Weighted average will bias towards the smaller of the two maximums
+                y_axis_max = ((2 * min(component_maximums)) + max(component_maximums)) / 3
+                
                 # Plot combined components
                 trace2 = px.line(nb_thetas[0]
                                  * (ss.nbinom.pmf(range(countsMax),
@@ -225,6 +245,22 @@ def plot_fits(counts:list,
                 fig.add_trace(trace1a.data[0], row=1, col=1)
             
             if value["num_comp"] == 2:
+                # Find a weighted average of each component maximum for Y axis scale
+                component_maximums = []
+                first_max = max(gmm_thetas[0]
+                                 * (ss.norm.pdf(range(countsMax),
+                                                  gmm_means[0],
+                                                  gmm_stdevs[0])))
+                second_max = max((1 - gmm_thetas[0])
+                                 * (ss.norm.pdf(range(countsMax),
+                                                  gmm_means[1],
+                                                  gmm_stdevs[1])))
+                component_maximums.append(first_max)
+                component_maximums.append(second_max)
+
+                # Weighted average will bias towards the smaller of the two maximums
+                y_axis_max = ((2 * min(component_maximums)) + max(component_maximums)) / 3
+                
                 # Update title to Gaussian
                 fig.layout.annotations[1].update(text="Gaussian Mixture Model (EM): 2 Components")
                 
@@ -320,10 +356,14 @@ def plot_fits(counts:list,
     
     fig.for_each_annotation(lambda a: a.update(text=f'{a.text}'))
     fig.update_annotations(font=dict(family="Calibri", size=15))
-    fig.update_layout(height=600, 
-                      width=1500, 
+    fig.update_layout(height=600,
+                      width=width,
                       title_text=f'Antibody: {ab_name}' +'<br>' + f'<span style="font-size: 15px;">Best model: <b>{best_mixture_model} Component <b></span>', 
                       showlegend=False)
+                  
+    fig.update_yaxes(range=[0, y_axis_max], row=1, col=1)
+    fig.update_yaxes(range=[0, y_axis_max], row=1, col=2)
+    fig.update_yaxes(range=[0, y_axis_max], row=1, col=3)
 
     fig['layout']['xaxis']['title']= formatted_aics[0]
     fig['layout']['xaxis2']['title']= formatted_aics[1]
@@ -331,13 +371,14 @@ def plot_fits(counts:list,
     
     fig.show()
 
-def plot_all_fits(IPD):
+def plot_all_fits(IPD, width: int = None):
     """
     Plots all antibody histograms and mixture model fits
 
     Parameters:
         IPD (ImmunoPhenoData Object): Object containing all fits from 
             mixture models
+        width (int): display width of all the graphs (optional)
     
     Returns:
         A series of plots with each type of mixture model for every antibody
@@ -352,7 +393,8 @@ def plot_all_fits(IPD):
     for index, ab in enumerate(IPD.protein):
         plot_fits(counts=IPD.protein.loc[:, ab],
                   fit_results=IPD._all_fits_dict[ab],
-                  ab_name=ab)
+                  ab_name=ab,
+                  width=width)
 
 def _gmm_init_params(counts: list,
                      n_components: int,
