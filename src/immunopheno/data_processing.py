@@ -1793,14 +1793,16 @@ class ImmunoPhenoData:
         Normalizes all values in a protein matrix
 
         Parameters:
-            p_threshold (float): threshold for p-value rejection when
-                performing linear regression to account for cell size and type
-            sig_expr_threshold (float): threshold for antibody expression when
-                filtering cells that have a high signal expression rate
-            bg_expr_threshold (float): threshold for antibody expression when
-                filtering cells that have a low signal expression rate
-            bg_cell_z_score (int): z-score value for background cells
-                when computing a z-score table for all normalized counts
+            p_threshold (float): level of significance for testing the association
+                between background antibody expression levels and the total number of
+                mRNA UMIs and the cell type. If p-value is smaller than the threshod,
+                these factors are regressed out
+            sig_expr_threshold (float): cells with a fraction of expressed proteins above
+                the threshold are filtered out
+            bg_expr_threshold (float): cells with a fraction of expressed proteins below
+                the threshold are filtered out
+            bg_cell_z_score (int): average protein expression z-score across cells that
+                express the protein
 
         Returns:
             normalized_df (pd.DataFrame): dataframe containing normalized
