@@ -34,8 +34,7 @@ def find_leaf_nodes(graph, node):
     leaf_nodes = [n for n in descendants if graph.out_degree(n) == 0]
     return leaf_nodes
 
-def subgraph(G, nodes: list):
-    root='CL:0000000'
+def subgraph(G, nodes: list, root='CL:0000000'):
     if root in nodes:
         raise Exception("Error. Root node cannot be a target node")
     
@@ -377,9 +376,12 @@ class ImmunoPhenoDB_Connect:
             else:
                 # Multiple leaf nodes require finding the lowest common ancestor
                 # Use custom subgraph function
-                custom_subgraph = subgraph(self._subgraph, leaf_nodes)
+                custom_subgraph = subgraph(self._subgraph, leaf_nodes, root=root)
+                # Include the original node
+                nodes_to_plot = list(leaf_nodes)
+                nodes_to_plot.insert(0, root)
                 # Check if these were in the database
-                node_in_db = list(set(leaf_nodes) & set(self._db_idCLs))
+                node_in_db = list(set(nodes_to_plot) & set(self._db_idCLs))
                 # Find hover names
                 hover_names = []
                 for node in list(custom_subgraph.nodes):
