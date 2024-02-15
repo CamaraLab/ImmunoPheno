@@ -24,7 +24,7 @@ def _load_adt(protein: str | pd.DataFrame) -> pd.DataFrame:
 
     Parameters:
       protein (str or pd.DataFrame): csv file path or dataframe where:
-        rows = proteins, cols = cells
+        rows = cells, cols = protein
 
     Returns:
       protein_df_copy (Pandas DataFrame):
@@ -1271,6 +1271,23 @@ def _normalize_antibody(fit_results: dict,
 
             return normalized_z_scores
 
+def _cumulative_dist(normalized_z_score: float) -> float:
+    """
+    Calculates the cumulative probability for a value
+    in a normal distribution
+
+    Parameters:
+        normalized_z_score (float): z_score of a cell for a given antibody 
+            retrieved from the normalized protein data
+
+    Returns:
+        cdf_value: cumulative probability from a normal distribution
+    """
+
+    # Use standard normal distribution, mean = 0, stdev = 1
+    cdf_value = ss.norm.cdf(normalized_z_score, 0, 1)
+    return cdf_value
+
 def _normalize_antibodies_df(protein_cleaned_filt_df: pd.DataFrame,
                              fit_all_results: dict,
                              p_threshold: float = 0.05,
@@ -1278,7 +1295,8 @@ def _normalize_antibodies_df(protein_cleaned_filt_df: pd.DataFrame,
                              classified_filt_df: pd.DataFrame = None,
                              cell_labels_filt_df: pd.DataFrame = None,
                              lin_reg_dict: dict = None,
-                             lin_reg: pd.DataFrame = None) -> pd.DataFrame:
+                             lin_reg: pd.DataFrame = None,
+                             cumulative: bool = False) -> pd.DataFrame:
     """
     Normalizes all antibodies in a protein dataset
 
@@ -1299,6 +1317,8 @@ def _normalize_antibodies_df(protein_cleaned_filt_df: pd.DataFrame,
             cell type
         lin_reg (pd.DataFrame): results of linear regression without
             separating by cell type
+        cumulative (bool): flag to indicate whether to return the 
+            cumulative distribution probabilities
 
     Returns:
         normalized_df_transpose (pd.DataFrame): DataFrame containing normalized
@@ -1327,6 +1347,11 @@ def _normalize_antibodies_df(protein_cleaned_filt_df: pd.DataFrame,
 
     # Transpose so the correct row/column labels are put
     normalized_df_transpose = normalized_df.T
+
+    # Generate the cumulative distribution values instead for signal cells
+    if cumulative is True:
+        normalized_df_transpose = normalized_df_transpose.apply(
+            lambda x: x.mask(x != background_cell_z_score, _cumulative_dist))
 
     if background_cell_z_score < 0:
         normalized_df_transpose = normalized_df_transpose - background_cell_z_score
@@ -1422,6 +1447,7 @@ class ImmunoPhenoData:
         # Calculated values
         self._all_fits = None
         self._all_fits_dict = None
+        self._cumulative = False
         self._normalized_counts_df = None
         self._classified_filt_df = None
         self._cell_labels_filt_df = None
@@ -1788,7 +1814,8 @@ class ImmunoPhenoData:
                                  p_threshold: float = 0.05,
                                  sig_expr_threshold: float = 0.85,
                                  bg_expr_threshold: float = 0.15,
-                                 bg_cell_z_score: int = 10):
+                                 bg_cell_z_score: int = 10,
+                                 cumulative: bool = False) -> pd.DataFrame:
         """
         Normalizes all values in a protein matrix
 
@@ -1803,6 +1830,8 @@ class ImmunoPhenoData:
                 the threshold are filtered out
             bg_cell_z_score (int): average protein expression z-score across cells that
                 express the protein
+            cumulative (bool): flag to indicate whether to return the 
+                cumulative distribution probabilities
         """
         bg_cell_z_score = -bg_cell_z_score
         if self._all_fits is None:
@@ -1851,6 +1880,9 @@ class ImmunoPhenoData:
         # Extract z scores for background cells
         background_z_scores = _bg_z_scores_df(classified_cells_filt, z_scores)
 
+        # Set cumulative flag
+        self._cumulative = cumulative
+
         # Set the background cell z score to the class attribute (for STvEA)
         self._background_cell_z_score = bg_cell_z_score
 
@@ -1878,7 +1910,8 @@ class ImmunoPhenoData:
                                     background_cell_z_score=bg_cell_z_score,
                                     classified_filt_df=classified_cells_filt,
                                     cell_labels_filt_df=cell_labels_filt,
-                                    lin_reg_dict=lin_reg_type)
+                                    lin_reg_dict=lin_reg_type,
+                                    cumulative=cumulative)
 
         # If dealing with single cell data WITHOUT cell labels:
         # Run linear regression to regress out only size
@@ -1893,7 +1926,8 @@ class ImmunoPhenoData:
                                     p_threshold=p_threshold,
                                     background_cell_z_score=bg_cell_z_score,
                                     classified_filt_df=classified_cells_filt,
-                                    lin_reg=lin_reg)
+                                    lin_reg=lin_reg,
+                                    cumulative=cumulative)
 
         # Else, normalize values for flow cytometry data
         else:
@@ -1903,7 +1937,8 @@ class ImmunoPhenoData:
                                     fit_all_results=all_fits,
                                     p_threshold=p_threshold,
                                     background_cell_z_score=bg_cell_z_score,
-                                    classified_filt_df=classified_cells_filt)
+                                    classified_filt_df=classified_cells_filt,
+                                    cumulative=cumulative)
         
         self._normalized_counts_df = normalized_df
         self._stvea_normalized_df = normalized_df.copy(deep=True).applymap(
