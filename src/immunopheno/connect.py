@@ -34,7 +34,26 @@ def find_leaf_nodes(graph, node):
     leaf_nodes = [n for n in descendants if graph.out_degree(n) == 0]
     return leaf_nodes
 
-def subgraph(G, nodes: list, root='CL:0000000'):
+def subgraph(G: nx.DiGraph, 
+             nodes: list, 
+             root: str ='CL:0000000')-> nx.DiGraph:
+    """
+    Constructs a subgraph from a larger graph based on 
+    a provided list of leaf nodes
+
+    Considers cell types as the leaf nodes of the subgraph when
+    finding the most common ancestor (root node)
+
+    Parameters:
+        G (nx.DiGraph): "Master" directed acylic graph containing all 
+            possible cell ontology relationships
+        nodes (list): cell ontologies of interest - leaf nodes of the graph 
+        root (str): root node of the graph
+
+    Returns:
+        subgraph (nx.DiGraph): subgraph containing cell ontology relationships
+            for only the nodes provided
+    """
     if root in nodes:
         raise Exception("Error. Root node cannot be a target node")
     
@@ -89,6 +108,26 @@ def subgraph(G, nodes: list, root='CL:0000000'):
 
     return subgraph
 
+def find_subgraph_from_root(G: nx.DiGraph, 
+                            root: str, 
+                            leaf_nodes: list):
+    all_paths_from_root = []
+                                
+    # Provided the root node, find all paths to each leaf node
+    for leaf in leaf_nodes:
+        paths = list(nx.all_simple_paths(G, root, leaf))
+        all_paths_from_root.extend(paths)
+
+    # Flatten all paths into a single list of nodes
+    all_visited_idCLs = [path for paths in all_paths_from_root for path in paths]
+
+    # Find all unique nodes that have been visited
+    unique_visited_idCLs = list(set(all_visited_idCLs))
+
+    # Return subgraph with only those nodes
+    subgraph = nx.subgraph(G, unique_visited_idCLs)
+    return subgraph
+    
 def plotly_subgraph(G, nodes_to_highlight, hover_text):
     # Get positions using a layout algorithm from netgraph 'dot'
     pos = graph_pos(G)
@@ -340,7 +379,6 @@ class ImmunoPhenoDB_Connect:
             for node in list(self._subgraph.nodes):
                 hover_names.append(self._db_idCL_names[node])
             plotly_graph = plotly_subgraph(self._subgraph, self._db_idCLs, hover_names)
-        
         else:
             leaf_nodes = find_leaf_nodes(self._subgraph, root)
             
@@ -374,12 +412,10 @@ class ImmunoPhenoDB_Connect:
                 plotly_graph = plotly_subgraph(default_subgraph, node_in_db, hover_names)
                 
             else:
-                # Multiple leaf nodes require finding the lowest common ancestor
                 # Use custom subgraph function
-                custom_subgraph = subgraph(self._subgraph, leaf_nodes, root=root)
+                custom_subgraph = find_subgraph_from_root(self._subgraph, root, leaf_nodes)
                 # Include the original node
-                nodes_to_plot = list(leaf_nodes)
-                nodes_to_plot.insert(0, root)
+                nodes_to_plot = list(custom_subgraph.nodes)
                 # Check if these were in the database
                 node_in_db = list(set(nodes_to_plot) & set(self._db_idCLs))
                 # Find hover names
