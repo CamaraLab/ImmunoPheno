@@ -93,16 +93,13 @@ def _read_csv(file_path: str, chunk_range=None):
 
     with open(file_path, "r") as f:
         reader = csv.reader(f)
-
-        # Transpose the rows to columns using zip_longest
-        transposed_rows = zip_longest(*reader)
-
+        
         if chunk_range is not None:
-            for i, column in enumerate(transposed_rows):
+            for i, column in enumerate(reader):
                 if i in col_indices:
                     yield list(column)
         else:
-            for column in transposed_rows:
+            for column in reader:
                 yield list(column)
 
 def _umi_generator(file_path: str, chunk_range=None):
@@ -123,17 +120,17 @@ def _umi_generator(file_path: str, chunk_range=None):
         if row[0].lower() != "":
             yield [int(x) for x in row[1:]]
 
-def _gene_name_generator(file_path: str):
+def _cell_name_generator(file_path: str):
     """
     Reads in an RNA csv file and produces a generator containing
-    gene names for each cell as a list
+    cell name (barcodes)
 
     Parameters:
         file_path (str): file path to csv file
 
     Returns:
-        row (generator object): generator containing all genes
-            for a single cell. Stored as a list
+        row (generator object): generator containing all cell barcodes
+            Stored as a list
     """
 
     for row in _read_csv(file_path):
@@ -186,34 +183,33 @@ def _load_rna_parallel(gene_filepath: str) -> pd.DataFrame:
         results_df (pd.DataFrame): sparse DataFrame with rows (cells) x columns (genes)
     """
 
-    # Create a generator to get all the column names
-    rna_data = _read_csv(gene_filepath)
-    cell_columns = [next(rna_data, None) for _ in range(1)][0][1:]
+    # Create a generator to get all the gene names (stored as the columns)
+    gene_name_generator = _read_csv(gene_filepath)
+    gene_names = [next(gene_name_generator, None) for _ in range(1)][0][1:]
+    
+    # Create a generator to get all cell names
+    cell_name_generator = _cell_name_generator(gene_filepath)
+    cell_names = list(cell_name_generator)
 
-    # Create a generator to get all gene names
-    gene_rows = _gene_name_generator(gene_filepath)
-    list_gene_rows = list(gene_rows)
-
-    # Default chunk size will be num genes // 2
-    chunk_size = len(list_gene_rows) // 2
+    # Default chunk size will be num cells // 2
+    chunk_size = len(cell_names) // 2
 
     # Default partition size will be chunk_size // 3
-    partition_size = chunk_size // 3
+    partition_size = (chunk_size // 3) 
 
-    # Generate all the ranges for genes in the dataset
-    gene_ranges = _clean_chunks(_generate_range(len(list_gene_rows) + 1,
+    # Generate all the ranges for cells in the dataset
+    cell_ranges = _clean_chunks(_generate_range(len(cell_names) + 1, # add one to include last row
                                                start=0,
                                                interval_size=chunk_size))
 
     dataframe_chunks = []
-
     def process_section(chunk):
         umi_chunk = _umi_generator(gene_filepath, chunk)
         umi_chunk_df = pd.DataFrame.sparse.from_spmatrix(scipy.sparse.csr_matrix(list(umi_chunk)))
         # return umi_chunk_df.T # less expensive to transpose here compare to the end
         return umi_chunk_df # no transpose, assume user provides cells as rows, ab as columns
 
-    for chunk in gene_ranges:
+    for chunk in cell_ranges:
         partition_ranges = _clean_chunks(_generate_range(chunk[1],
                                                        interval_size=partition_size,
                                                        start=chunk[0]))
@@ -225,12 +221,12 @@ def _load_rna_parallel(gene_filepath: str) -> pd.DataFrame:
             dataframe_chunks.append(rna_df)
 
     # Combine all DataFrames
-    results_df = pd.concat(dataframe_chunks, ignore_index=True, axis=1)
+    results_df = pd.concat(dataframe_chunks, ignore_index=True, axis=0) # axis = 0 concatenates vertically
 
     # Add in Index and Columns
-    cell_index = pd.Index(cell_columns)
+    cell_index = pd.Index(cell_names)
     results_df.set_index(cell_index, inplace=True)
-    results_df.columns = list_gene_rows
+    results_df.columns = gene_names
 
     return results_df
 
@@ -249,17 +245,15 @@ def _load_rna(gene: str | pd.DataFrame) -> pd.DataFrame:
     if isinstance(gene, str):
         # If the number of cells is <= 20k, we can use pandas directly to load
         # Create a generator to get all the column names
-        rna_data = _read_csv(gene)
-        cell_columns = [next(rna_data, None) for _ in range(1)][0][1:]
+        cell_name_generator = _cell_name_generator(gene)
+        cell_names = list(cell_name_generator)
 
-        if len(cell_columns) <= 20000:
-            # rna_df = pd.read_csv(gene_filepath, sep=",", index_col=[0]).T
+        if len(cell_names) <= 20000:
             rna_df = pd.read_csv(gene, sep=",", index_col=[0]) # assume user provides cells as rows
 
         # Otherwise, load in parallel
         else:
             rna_df = _load_rna_parallel(gene)
-
     else:
         rna_df = gene
 
