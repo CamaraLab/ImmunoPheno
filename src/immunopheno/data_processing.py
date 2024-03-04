@@ -288,24 +288,47 @@ def _read_antibodies(csv_file: str) -> list:
         csv_file (str): name of csv file containing antibody names
 
     Returns:
-        antibodies (list): list of tuples with ab_name and antibody ids
-        ex: [("CD4", "AB_XXXXXXX"), ("CD5", "AB_XXXXXXX"))
+        antibodies (list): list of lists with ab_name and antibody ids
+        ex: [["CD4", "AB_XXXXXXX"], ["CD5", "AB_XXXXXXX"]]
     """
     antibodies = []
 
     with open(csv_file, 'r') as csv_file:
         lines = csv_file.readlines()
         num_lines = len(lines)
-        ab_index = (lines.index('Antibody table:,\n') + 1)
+        ab_index = next((i for i, line in enumerate(lines) if 'Antibody table' in line), None) + 1
 
-        while ab_index < num_lines:
-            ab = lines[ab_index].strip().split(",", maxsplit=1)
-            ab_name_strip = ab[0].strip()
-            ab_id_strip = ab[1].strip()
-            antibodies.append([ab_name_strip, ab_id_strip])
-            ab_index += 1
-
+        if ab_index is not None:
+            while ab_index < num_lines:
+                ab = lines[ab_index].strip().split(",", maxsplit=1)
+                ab_name_strip = ab[0].strip()
+                ab_id_strip = ab[1].strip()
+                antibodies.append([ab_name_strip, ab_id_strip])
+                ab_index += 1
+        else:
+            print("'Antibody table' not found in any line.")
+    
     return antibodies
+
+def _target_ab_dict(antibody_pairs: list) -> dict:
+    """
+    Creates a dictionary of antibody names with their IDs
+
+    Parameters:
+        antibody_pairs (list): list of antibody pairs from _read_antibodies().
+            Ex: [["CD4", "AB_XXXXXXX"], ["CD5", "AB_XXXXXXX"]]
+
+    Returns:
+        target_ab (dict): mapping dictionary of antibody names
+            Ex: {"CD4": "AB_XXXXXXX",
+                 "CD5": "AB_XXXXXXX" 
+                 ...}
+    """
+    target_ab = {}
+    for pair in antibody_pairs:
+        target_ab[pair[0]] = pair[1]
+        
+    return target_ab
 
 def _filter_antibodies(protein_matrix: pd.DataFrame,
                        csv_file: str) -> pd.DataFrame:
@@ -1448,6 +1471,7 @@ class ImmunoPhenoData:
         self._linear_reg_df = None
         self._z_scores_df = None
         self._singleR_rna = None
+        self._ab_ids_dict = None
 
         # Used when sending data to the server for running STvEA
         self._background_cell_z_score = -10
@@ -1517,6 +1541,9 @@ class ImmunoPhenoData:
         if spreadsheet is not None:
             self._protein_matrix = _filter_antibodies(self._protein_matrix, spreadsheet)
             self._temp_protein = self._protein_matrix.copy(deep=True)
+
+            # Also create a dictionary of antibodies with their IDs for name conversion
+            self._ab_ids_dict = _target_ab_dict(_read_antibodies(spreadsheet))
 
     @property
     def all_fits_dict(self):
