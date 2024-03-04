@@ -18,6 +18,9 @@ from networkx.algorithms.dag import dag_longest_path
 import matplotlib.pyplot as plt
 from netgraph import Graph
 
+from sklearn.impute import KNNImputer
+from .stvea_controller import Controller
+
 def _update_cl_owl():
     warnings.filterwarnings("ignore")
     response = requests.get('https://www.ebi.ac.uk/ols4/api/ontologies/cl')
@@ -320,6 +323,92 @@ def plot_celltypes_graph(ab_id: str,
 
     return fig
 
+def remove_all_zeros_or_na(protein_df):
+    # Check if any row in the DataFrame has all NAs or all zeros
+    rows_to_exclude = protein_df.apply(lambda row: all(row.isna() | (row == 0)), axis=1)
+    
+    # Filter out rows to keep only those that do not meet the exclusion conditions
+    filtered_df_rows = protein_df[~rows_to_exclude]
+
+    # Check if any column in the DataFrame has all NAs or all zeros
+    columns_to_exclude = filtered_df_rows.apply(lambda col: all(col.isna() | (col == 0)), axis=0)
+    
+    # Filter out columns to keep only those that do not meet the exclusion conditions
+    filtered_df = filtered_df_rows.loc[:, ~columns_to_exclude]
+
+    # Display the modified DataFrame
+    return filtered_df
+
+def impute_dataset(downsampled_df):
+    # Get all antibodies from dataframe
+    ab_columns = [ab for ab in downsampled_df.columns if (ab != 'idCL' and ab != 'idExperiment')]
+
+    # format_df will have missing values (NaNs) for some antibodies
+    # Subset the columns out containing the antibodies only
+    antibody_df = downsampled_df[ab_columns].to_numpy()
+                               
+    # Impute these values in using KNN
+    imputer = KNNImputer(n_neighbors=10, weights="distance")
+    imputed_np = imputer.fit_transform(antibody_df)
+
+    # Put these imputed values back into the dataframe
+    imputed_df = pd.DataFrame(imputed_np, index=downsampled_df.index, columns=ab_columns)
+
+    # Add the idCL column back in at the end
+    combined_impute = pd.concat([imputed_df, downsampled_df['idCL']], axis=1)
+
+    return combined_impute
+
+def convert_idCL_readable(idCL:str) -> str:
+    """
+    Converts a cell ontology id (CL:XXXXXXX) into a readable cell type name
+
+    Parameters:
+        idCL (str): cell ontology ID
+
+    Returns:
+        cellType (str): readable cell type name
+        
+    """
+    idCL_params = {
+        'q': idCL,
+        'exact': 'true',
+        'ontology': 'cl',
+        'fieldList': 'label',
+        'rows': 1,
+        'start': 0
+    }
+
+    try:
+        res = requests.get("https://www.ebi.ac.uk/ols4/api/search", params=idCL_params)
+        res_JSON = res.json()
+        cellType = res_JSON['response']['docs'][0]['label']
+    except:
+        cellType = idCL
+    
+    return cellType
+
+def ebi_idCL_map(labels_df: pd.DataFrame) -> dict:
+    """
+    Converts a list of cell ontology IDs into readable cell type names
+    as a dictionary
+
+    Parameters:
+        labels_df (pd.DataFrame): dataframe with cell labels from singleR
+    
+    Returns:
+        idCL_map (dict) : dictionary mapping cell ontology ID to cell type
+    
+    """
+    idCL_map = {}
+    
+    idCLs = set(labels_df["labels"])
+    
+    for idCL in idCLs:
+        idCL_map[idCL] = convert_idCL_readable(idCL)
+    
+    return idCL_map
+
 class ImmunoPhenoDB_Connect:
     def __init__(self, url: str):
         self.url = url
@@ -327,10 +416,22 @@ class ImmunoPhenoDB_Connect:
         self._subgraph = None
         self._db_idCLs = None
         self._db_idCL_names = None
+        self.imputed_reference = None
 
+        if self.url is None:
+            raise Exception("Error. Server URL must be provided")
+
+        if self.url is not None and self.url.endswith("/"):
+            # Find the last forward slash
+            last_slash_index = self.url.rfind("/")
+            
+            # Remove everything after the last forward slash
+            result_url = self.url[:last_slash_index]
+            self.url = result_url
+        
         if "://" not in self.url:
             self.url = "http://" + self.url
-    
+        
         if self._OWL_graph is None:
             print("Loading necessary files...")
             owl_link = _update_cl_owl()
@@ -412,6 +513,7 @@ class ImmunoPhenoDB_Connect:
                 plotly_graph = plotly_subgraph(default_subgraph, node_in_db, hover_names)
                 
             else:
+                # Multiple leaf nodes require finding the lowest common ancestor
                 # Use custom subgraph function
                 custom_subgraph = find_subgraph_from_root(self._subgraph, root, leaf_nodes)
                 # Include the original node
@@ -607,3 +709,92 @@ class ImmunoPhenoDB_Connect:
             res_JSON = wc_response.json()
             res_df = pd.DataFrame.from_dict(res_JSON)
             return res_df
+
+    def run_stvea(self,
+                  IPD = None,
+                  idBTO: list = None, 
+                  idExperiment: list = None, 
+                  parse_option: int = 1, 
+                  pairwise_threshold: float = 1.0, 
+                  na_threshold: float = 1.0, 
+                  population_size: int = 50,
+                  # STvEA parameters
+                  k_find_nn: int = 80,
+                  k_find_anchor: int = 20,
+                  k_filter_anchor: int = 100,
+                  k_score_anchor: int = 80,
+                  k_find_weights: int = 100,
+                  k_transfer_matrix = None,
+                  c_transfer_matrix: float = 0.1,
+                  mask_threshold: float = 0.5,
+                  mask: bool = True):
+
+        # Generate reference data if not present
+        if self.imputed_reference is None:
+            antibody_pairs = [[key, value] for key, value in IPD._ab_ids_dict.items()]
+        
+            stvea_body = {
+                "antibody_pairs": antibody_pairs,
+                "idBTO": idBTO,
+                "idExperiment": idExperiment,
+                "parse_option": parse_option,
+                "pairwise_threshold": pairwise_threshold,
+                "na_threshold": na_threshold,
+                "population_size": population_size
+            }
+
+            print("Retrieving reference dataset...")
+            stvea_response = requests.post(f"{self.url}/api/stveareference", json=stvea_body)
+            if 'text/html' in stvea_response.headers.get('content-type'):
+                return stvea_response.text
+            elif 'application/json' in stvea_response.headers.get('content-type'):
+                res_JSON = stvea_response.json()
+                reference_dataset = pd.DataFrame.from_dict(res_JSON)
+        
+            # Impute any missing values in reference dataset
+            print("Imputing missing values...")
+            imputed_reference = impute_dataset(reference_dataset) 
+            self.imputed_reference = imputed_reference
+
+        # Separate out the antibody counts from the cell IDs 
+        imputed_antibodies = self.imputed_reference.loc[:, self.imputed_reference.columns != 'idCL']
+        imputed_idCLs = self.imputed_reference['idCL'].to_frame()
+    
+        # Convert antibody names from CODEX normalized counts to their IDs
+        codex_normalized_with_ids = IPD._stvea_normalized_df.rename(columns=IPD._ab_ids_dict, inplace=False)
+    
+        # Perform check for rows/columns with all 0s or NAs
+        codex_normalized_with_ids = remove_all_zeros_or_na(codex_normalized_with_ids)
+                        
+        # At this stage, we have all the information we need to run STvEA
+        print("Running STvEA...")
+        cn = Controller()
+        cn.interface(codex_protein=codex_normalized_with_ids, 
+                     cite_protein=imputed_antibodies,
+                     cite_cluster=imputed_idCLs,
+                     k_find_nn=k_find_nn,
+                     k_find_anchor=k_find_anchor,
+                     k_filter_anchor=k_filter_anchor,
+                     k_score_anchor=k_score_anchor,
+                     k_find_weights=k_find_weights,
+                     # transfer_matrix
+                     k_transfer_matrix=k_transfer_matrix,
+                     c_transfer_matrix=c_transfer_matrix,
+                     mask_threshold=mask_threshold,
+                     mask=mask)
+    
+        transferred_labels = cn.stvea.codex_cluster_names_transferred
+        
+        # Add these labels to the IPD object
+        IPD._cell_labels_filt_df = transferred_labels.to_frame(name="labels")
+
+        # Map cell type to cell ID
+        celltype_mapping_dict = ebi_idCL_map(IPD._cell_labels_filt_df)
+
+        # Apply new column
+        IPD._cell_labels_filt_df['celltype'] = IPD._cell_labels_filt_df['labels'].map(celltype_mapping_dict)
+
+        # Make sure the indexes match
+        IPD._normalized_counts_df = IPD._normalized_counts_df.loc[IPD._cell_labels_filt_df.index]
+        print("Annotation transfer complete.")
+        return IPD
