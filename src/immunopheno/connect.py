@@ -416,6 +416,7 @@ class ImmunoPhenoDB_Connect:
         self._subgraph = None
         self._db_idCLs = None
         self._db_idCL_names = None
+        self._last_stvea_params = None
         self.imputed_reference = None
 
         if self.url is None:
@@ -711,7 +712,7 @@ class ImmunoPhenoDB_Connect:
             return res_df
 
     def run_stvea(self,
-                  IPD = None,
+                  IPD,
                   idBTO: list = None, 
                   idExperiment: list = None, 
                   parse_option: int = 1, 
@@ -729,8 +730,11 @@ class ImmunoPhenoDB_Connect:
                   mask_threshold: float = 0.5,
                   mask: bool = True):
 
-        # Generate reference data if not present
-        if self.imputed_reference is None:
+        # Check if reference query parameters have changed OR if the reference table is empty
+        if (IPD, idBTO, idExperiment, 
+            parse_option, pairwise_threshold, 
+            na_threshold, population_size) != self._last_stvea_params or self.imputed_reference is None:
+
             antibody_pairs = [[key, value] for key, value in IPD._ab_ids_dict.items()]
         
             stvea_body = {
@@ -755,6 +759,11 @@ class ImmunoPhenoDB_Connect:
             print("Imputing missing values...")
             imputed_reference = impute_dataset(reference_dataset) 
             self.imputed_reference = imputed_reference
+
+            # Store these parameters to check for subsequent function calls
+            self._last_stvea_params = (IPD, idBTO, idExperiment, 
+                                       parse_option, pairwise_threshold, 
+                                       na_threshold, population_size)
 
         # Separate out the antibody counts from the cell IDs 
         imputed_antibodies = self.imputed_reference.loc[:, self.imputed_reference.columns != 'idCL']
