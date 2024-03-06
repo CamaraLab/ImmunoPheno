@@ -62,7 +62,7 @@ def _find_background_comp(fit_results: dict) -> int:
 def plot_fits(counts: list,
               fit_results: dict,
               ab_name: str,
-              width: int = None):
+              width:int = None):
     """
     Plots the fits of the mixture model for an antibody
 
@@ -76,8 +76,6 @@ def plot_fits(counts: list,
         Plotly graph containing a histogram of the counts and the plots
         containing the individual components of each model
     """
-    
-    countsMax = int(max(counts))
     
     # Make initial subplots 
     fig = make_subplots(rows=1, 
@@ -116,12 +114,15 @@ def plot_fits(counts: list,
             nb_p_params = value["nb_p_params"]
             aic = value["aic"]
             aics.append(aic)
+
+            x_values = np.linspace(min(counts), max(counts), 1000)
             
             if value['num_comp'] == 1:
                 # Single component will always be background, so make it red
-                trace1a = px.line(1 * (ss.nbinom.pmf(range(countsMax), 
-                                                   nb_n_params[0], 
-                                                   nb_p_params[0])), 
+                trace1a = px.line(x=x_values,
+                                  y=1 * (ss.nbinom.pmf(x_values, 
+                                                       nb_n_params[0], 
+                                                       nb_p_params[0])), 
                                   color_discrete_sequence=["red"])
 
                 fig.add_trace(trace1a.data[0], row=1, col=1)
@@ -130,11 +131,11 @@ def plot_fits(counts: list,
                 # Find a weighted average of each component maximum for Y axis scale
                 component_maximums = []
                 first_max = max(nb_thetas[0]
-                                 * (ss.nbinom.pmf(range(countsMax),
+                                 * (ss.nbinom.pmf(x_values,
                                                   nb_n_params[0],
                                                   nb_p_params[0])))
                 second_max = max((1 - nb_thetas[0])
-                                 * (ss.nbinom.pmf(range(countsMax),
+                                 * (ss.nbinom.pmf(x_values,
                                                   nb_n_params[1],
                                                   nb_p_params[1])))
                 component_maximums.append(first_max)
@@ -144,12 +145,13 @@ def plot_fits(counts: list,
                 y_axis_max = ((2 * min(component_maximums)) + max(component_maximums)) / 3
                 
                 # Plot combined components
-                trace2 = px.line(nb_thetas[0]
-                                 * (ss.nbinom.pmf(range(countsMax),
+                trace2 = px.line(x=x_values,
+                                 y=nb_thetas[0]
+                                 * (ss.nbinom.pmf(x_values,
                                                   nb_n_params[0],
                                                   nb_p_params[0]))
                                  + (1 - nb_thetas[0])
-                                 * (ss.nbinom.pmf(range(countsMax),
+                                 * (ss.nbinom.pmf(x_values,
                                                   nb_n_params[1],
                                                   nb_p_params[1])),
                                 color_discrete_sequence=["orange"])
@@ -163,16 +165,18 @@ def plot_fits(counts: list,
                     
                     # If this is the background component
                     if index == background_component:
-                        trace2a = px.line(tempThetas[index] 
-                                          * (ss.nbinom.pmf(range(countsMax), 
+                        trace2a = px.line(x=x_values,
+                                          y=tempThetas[index] 
+                                          * (ss.nbinom.pmf(x_values, 
                                                            nb_n_params[index], 
                                                            nb_p_params[index])), 
                                             color_discrete_sequence=["red"])
                         fig.add_trace(trace2a.data[0], row=1, col=2)
                     else:
                         nextColor = line_colors.pop()
-                        trace2b = px.line(tempThetas[index] 
-                                          * (ss.nbinom.pmf(range(countsMax), 
+                        trace2b = px.line(x=x_values,
+                                          y=tempThetas[index] 
+                                          * (ss.nbinom.pmf(x_values, 
                                                            nb_n_params[index], 
                                                            nb_p_params[index])), 
                                             color_discrete_sequence=[nextColor])
@@ -180,17 +184,18 @@ def plot_fits(counts: list,
             
             if value["num_comp"] == 3:
                 # Plot combined components
-                trace3 = px.line(nb_thetas[0]
-                                 * (ss.nbinom.pmf(range(countsMax),
+                trace3 = px.line(x=x_values,
+                                 y=nb_thetas[0]
+                                 * (ss.nbinom.pmf(x_values,
                                                   nb_n_params[0],
                                                   nb_p_params[0]))
                                  + nb_thetas[1]
-                                 * (ss.nbinom.pmf(range(countsMax),
+                                 * (ss.nbinom.pmf(x_values,
                                                   nb_n_params[1],
                                                   nb_p_params[1]))
                                  + (1 - nb_thetas[0]
                                       - nb_thetas[1])
-                                 * (ss.nbinom.pmf(range(countsMax),
+                                 * (ss.nbinom.pmf(x_values,
                                                   nb_n_params[2],
                                                   nb_p_params[2])),
                                     color_discrete_sequence=["orange"])
@@ -205,16 +210,18 @@ def plot_fits(counts: list,
                     
                     # If this is the background component
                     if index == background_component:
-                        trace3a = px.line(tempThetas[index] 
-                                          * (ss.nbinom.pmf(range(countsMax), 
+                        trace3a = px.line(x=x_values,
+                                          y=tempThetas[index] 
+                                          * (ss.nbinom.pmf(x_values, 
                                                            nb_n_params[index], 
                                                            nb_p_params[index])), 
                                             color_discrete_sequence=["red"])
                         fig.add_trace(trace3a.data[0], row=1, col=3)
                     else:
                         nextColor = line_colors.pop()
-                        trace3b = px.line(tempThetas[index] 
-                                          * (ss.nbinom.pmf(range(countsMax), 
+                        trace3b = px.line(x=x_values,
+                                          y=tempThetas[index] 
+                                          * (ss.nbinom.pmf(x_values, 
                                                            nb_n_params[index], 
                                                            nb_p_params[index])), 
                                             color_discrete_sequence=[nextColor])
@@ -231,15 +238,18 @@ def plot_fits(counts: list,
             gmm_stdevs = value['gmm_stdevs']
             aic = value["aic"]
             aics.append(aic)
+
+            x_values = np.linspace(min(counts), max(counts), 1000)
             
             if value["num_comp"] == 1:
                 # Update title to Gaussian
                 fig.layout.annotations[0].update(text="Gaussian Mixture Model (EM): 1 Component")
                 
                  # Single component will always be background, so make it red
-                trace1a = px.line(1 * (ss.norm.pdf(range(countsMax), 
-                                                   gmm_means[0], 
-                                                   gmm_stdevs[0])), 
+                trace1a = px.line(x=x_values, 
+                                  y=1 * (ss.norm.pdf(x_values, 
+                                                     gmm_means[0], 
+                                                     gmm_stdevs[0])), 
                                   color_discrete_sequence=["red"])
 
                 fig.add_trace(trace1a.data[0], row=1, col=1)
@@ -248,13 +258,13 @@ def plot_fits(counts: list,
                 # Find a weighted average of each component maximum for Y axis scale
                 component_maximums = []
                 first_max = max(gmm_thetas[0]
-                                 * (ss.norm.pdf(range(countsMax),
-                                                  gmm_means[0],
-                                                  gmm_stdevs[0])))
+                                 * (ss.norm.pdf(x_values,
+                                                gmm_means[0],
+                                                gmm_stdevs[0])))
                 second_max = max((1 - gmm_thetas[0])
-                                 * (ss.norm.pdf(range(countsMax),
-                                                  gmm_means[1],
-                                                  gmm_stdevs[1])))
+                                 * (ss.norm.pdf(x_values,
+                                                gmm_means[1],
+                                                gmm_stdevs[1])))
                 component_maximums.append(first_max)
                 component_maximums.append(second_max)
 
@@ -265,14 +275,15 @@ def plot_fits(counts: list,
                 fig.layout.annotations[1].update(text="Gaussian Mixture Model (EM): 2 Components")
                 
                 # Plot combined components
-                trace2 = px.line(gmm_thetas[0]
-                                 * (ss.norm.pdf(range(countsMax),
-                                                  gmm_means[0],
-                                                  gmm_stdevs[0]))
+                trace2 = px.line(x=x_values,
+                                 y=gmm_thetas[0]
+                                 * (ss.norm.pdf(x_values,
+                                                gmm_means[0],
+                                                gmm_stdevs[0]))
                                  + (1 - gmm_thetas[0])
-                                 * (ss.norm.pdf(range(countsMax),
-                                                  gmm_means[1],
-                                                  gmm_stdevs[1])),
+                                 * (ss.norm.pdf(x_values,
+                                                gmm_means[1],
+                                                gmm_stdevs[1])),
                                 color_discrete_sequence=["orange"])
                 
                 fig.add_trace(trace2.data[0], row=1, col=2)
@@ -285,18 +296,20 @@ def plot_fits(counts: list,
                     
                     # If this is the background component
                     if index == background_component:
-                        trace2a = px.line(tempThetas[index] 
-                                          * (ss.norm.pdf(range(countsMax), 
-                                                           gmm_means[index], 
-                                                           gmm_stdevs[index])), 
+                        trace2a = px.line(x=x_values,
+                                          y=tempThetas[index] 
+                                          * (ss.norm.pdf(x_values, 
+                                                         gmm_means[index], 
+                                                         gmm_stdevs[index])), 
                                             color_discrete_sequence=["red"])
                         fig.add_trace(trace2a.data[0], row=1, col=2)
                     else:
                         nextColor = line_colors.pop()
-                        trace2b = px.line(tempThetas[index] 
-                                          * (ss.norm.pdf(range(countsMax), 
-                                                           gmm_means[index], 
-                                                           gmm_stdevs[index])), 
+                        trace2b = px.line(x=x_values,
+                                          y=tempThetas[index] 
+                                          * (ss.norm.pdf(x_values, 
+                                                         gmm_means[index], 
+                                                         gmm_stdevs[index])), 
                                             color_discrete_sequence=[nextColor])
                         fig.add_trace(trace2b.data[0], row=1, col=2)
                 
@@ -305,19 +318,20 @@ def plot_fits(counts: list,
                 fig.layout.annotations[2].update(text="Gaussian Mixture Model (EM): 3 Components")
                 
                 # Plot combined components
-                trace3 = px.line(gmm_thetas[0]
-                                 * (ss.norm.pdf(range(countsMax),
-                                                  gmm_means[0],
-                                                  gmm_stdevs[0]))
+                trace3 = px.line(x=x_values,
+                                 y=gmm_thetas[0]
+                                 * (ss.norm.pdf(x_values,
+                                                gmm_means[0],
+                                                gmm_stdevs[0]))
                                  + gmm_thetas[1]
-                                 * (ss.norm.pdf(range(countsMax),
-                                                  gmm_means[1],
-                                                  gmm_stdevs[1]))
+                                 * (ss.norm.pdf(x_values,
+                                                gmm_means[1],
+                                                gmm_stdevs[1]))
                                  + (1 - gmm_thetas[0]
                                       - gmm_thetas[1])
-                                 * (ss.norm.pdf(range(countsMax),
-                                                  gmm_means[2],
-                                                  gmm_stdevs[2])),
+                                 * (ss.norm.pdf(x_values,
+                                                gmm_means[2],
+                                                gmm_stdevs[2])),
                                     color_discrete_sequence=["orange"])
                 fig.add_trace(trace3.data[0], row=1, col=3)
                 
@@ -330,22 +344,23 @@ def plot_fits(counts: list,
                     
                     # If this is the background component
                     if index == background_component:
-                        trace3a = px.line(tempThetas[index] 
-                                          * (ss.norm.pdf(range(countsMax), 
-                                                           gmm_means[index], 
-                                                           gmm_stdevs[index])), 
+                        trace3a = px.line(x=x_values,
+                                          y=tempThetas[index] 
+                                          * (ss.norm.pdf(x_values, 
+                                                         gmm_means[index], 
+                                                         gmm_stdevs[index])), 
                                             color_discrete_sequence=["red"])
                         fig.add_trace(trace3a.data[0], row=1, col=3)
                     else:
                         nextColor = line_colors.pop()
-                        trace3b = px.line(tempThetas[index] 
-                                          * (ss.norm.pdf(range(countsMax), 
-                                                           gmm_means[index], 
-                                                           gmm_stdevs[index])), 
+                        trace3b = px.line(x=x_values,
+                                          y=tempThetas[index] 
+                                          * (ss.norm.pdf(x_values, 
+                                                         gmm_means[index], 
+                                                         gmm_stdevs[index])), 
                                             color_discrete_sequence=[nextColor])
                         fig.add_trace(trace3b.data[0], row=1, col=3)
                 
-                        
     # Add "AIC: " prefix and bold heading to list of AICs
     formatted_aics = []
     for count, aic in enumerate(aics):
