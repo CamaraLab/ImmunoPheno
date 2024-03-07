@@ -115,7 +115,7 @@ def plot_fits(counts: list,
             aic = value["aic"]
             aics.append(aic)
 
-            x_values = np.linspace(min(counts), max(counts), 1000)
+            x_values = range(int(min(counts)), int(max(counts)))
             
             if value['num_comp'] == 1:
                 # Single component will always be background, so make it red
@@ -239,7 +239,7 @@ def plot_fits(counts: list,
             aic = value["aic"]
             aics.append(aic)
 
-            x_values = np.linspace(min(counts), max(counts), 1000)
+            x_values = np.linspace(min(counts), max(counts), len(counts))
             
             if value["num_comp"] == 1:
                 # Update title to Gaussian
