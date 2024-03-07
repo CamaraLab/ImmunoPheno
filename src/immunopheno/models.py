@@ -386,6 +386,35 @@ def plot_fits(counts: list,
     
     fig.show()
 
+def plot_ab_fit(IPD, ab: str, width: int = None):
+    """
+    Plots an antibody histogram and mixture model fits
+
+    Parameters:
+        IPD (ImmunoPhenoData Object): Object containing all fits from 
+            mixture models
+        ab (str): name of antibody to retrieve fits 
+        width (int): display width of all the graphs (optional)
+
+    Returns:
+        A series of plots (1, 2, 3 component mixture models) for an
+        antibody after fitting with a negative binomial or gaussian curve.
+    """
+    if IPD._all_fits is None:
+        raise Exception("No fits found. Call fit_all_antibodies first")
+    
+    if len(IPD._all_fits_dict) == 0:
+        raise Exception("No fits found. Call fit_all_antibodies first")
+
+    if isinstance(ab, str):
+        try:
+            plot_fits(counts=IPD.protein.loc[:, ab],
+                      fit_results=IPD._all_fits_dict[ab],
+                      ab_name=ab,
+                      width=width)
+        except:
+            raise Exception(f"'{ab}' not found in protein data.")
+
 def plot_all_fits(IPD, width: int = None):
     """
     Plots all antibody histograms and mixture model fits
