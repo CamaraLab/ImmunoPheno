@@ -4,7 +4,7 @@ import time
 import warnings
 from copy import deepcopy
 import matplotlib.pyplot as plt
-import umap.umap_ as umap
+import umap
 import pandas as pd
 import numpy as np
 import hdbscan
