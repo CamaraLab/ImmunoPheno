@@ -451,10 +451,12 @@ class ImmunoPhenoDB_Connect:
                 self._db_idCLs = idCLs
                 self._subgraph = subgraph(self._OWL_graph, self._db_idCLs)
 
-                idCL_names = {}
-                # Find all readable cell type names for each node
-                for node in list(self._subgraph.nodes):
-                    idCL_names[node] = convert_idCL_readable(node)
+                convert_idCL = {
+                    "idCL": list(self._subgraph.nodes)
+                }
+
+                convert_idCL_res = requests.post(f"{self.url}/api/convertcelltype", json=convert_idCL)
+                idCL_names = convert_idCL_res.json()["results"]                
                 self._db_idCL_names = idCL_names
                 
                 print("Connected to database.")
@@ -798,10 +800,15 @@ class ImmunoPhenoDB_Connect:
         IPD._cell_labels_filt_df = transferred_labels.to_frame(name="labels")
 
         # Map cell type to cell ID
-        celltype_mapping_dict = ebi_idCL_map(IPD._cell_labels_filt_df)
+        convert_idCL = {
+            "idCL": list(set(IPD._cell_labels_filt_df['labels']))
+        }
+
+        convert_idCL_res = requests.post(f"{self.url}/api/convertcelltype", json=convert_idCL)
+        idCL_names = convert_idCL_res.json()["results"]       
 
         # Apply new column
-        IPD._cell_labels_filt_df['celltype'] = IPD._cell_labels_filt_df['labels'].map(celltype_mapping_dict)
+        IPD._cell_labels_filt_df['celltype'] = IPD._cell_labels_filt_df['labels'].map(idCL_names)
 
         # Make sure the indexes match
         IPD._normalized_counts_df = IPD._normalized_counts_df.loc[IPD._cell_labels_filt_df.index]
