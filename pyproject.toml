@@ -27,8 +27,9 @@ dependencies = [
     "networkx==3.1",
     "nxontology==0.5.0",
     "netgraph==4.12.11",
-    "tqdm",
+    "tqdm==4.65.0",
     "scanpy==1.9.5",
+    "ipywidgets==8.0.6",
 
     "contourpy==1.2.0",
     "cycler==0.12.1",
