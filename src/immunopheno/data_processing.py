@@ -1723,8 +1723,8 @@ class ImmunoPhenoData:
             raise TransformTypeError("transform_type must be chosen to use "
                                   "transform_scale. choose 'log' or 'arcsinh'.")
 
-        if isinstance(transform_scale, int) == False:
-            raise TransformScaleError("'transform_scale' must be an integer value.")
+        # if isinstance(transform_scale, int) == False:
+        #     raise TransformScaleError("'transform_scale' must be an integer value.")
 
         if isinstance(plot, bool) == False:
             raise PlotAntibodyFitError("'plot' must be a boolean value.")
@@ -1752,15 +1752,20 @@ class ImmunoPhenoData:
         else:
             data_vector = input
 
+        if transform_type is None:
+            # If no transform type, reset data back to normal
+            self.protein.loc[:, ab_name] = self._temp_protein.loc[:, ab_name]
 
         if transform_type is not None:
             if transform_type == 'log':
                 data_vector = _log_transform(d_vect=data_vector,
                                             scale=transform_scale)
+                self.protein.loc[:, ab_name] = data_vector
 
             elif transform_type == 'arcsinh':
                 data_vector = _arcsinh_transform(d_vect=data_vector,
                                                 scale=transform_scale)
+                self.protein.loc[:, ab_name] = data_vector
 
             else:
                 raise TransformTypeError(("Invalid transformation type. " 
