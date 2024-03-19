@@ -1746,15 +1746,16 @@ class ImmunoPhenoData:
                 # Also set ab_name to input, since input is the string of the antibody
                 ab_name = input
                 individual = True
+
+                if transform_type is None:
+                    # If no transform type, reset data back to normal
+                    self.protein.loc[:, ab_name] = self._temp_protein.loc[:, ab_name]
+                    
             except:
                 raise AntibodyLookupError(f"'{input}' not found in protein data.")
         # Fitting all antibodies at once
         else:
             data_vector = input
-
-        if transform_type is None:
-            # If no transform type, reset data back to normal
-            self.protein.loc[:, ab_name] = self._temp_protein.loc[:, ab_name]
 
         if transform_type is not None:
             if transform_type == 'log':
