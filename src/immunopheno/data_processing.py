@@ -1750,7 +1750,8 @@ class ImmunoPhenoData:
                 if transform_type is None:
                     # If no transform type, reset data back to normal
                     self.protein.loc[:, ab_name] = self._temp_protein.loc[:, ab_name]
-                    
+                    data_vector = list(self._temp_protein.loc[:, ab_name])
+
             except:
                 raise AntibodyLookupError(f"'{input}' not found in protein data.")
         # Fitting all antibodies at once
