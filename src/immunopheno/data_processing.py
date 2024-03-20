@@ -1545,6 +1545,23 @@ class ImmunoPhenoData:
             # Also create a dictionary of antibodies with their IDs for name conversion
             self._ab_ids_dict = _target_ab_dict(_read_antibodies(spreadsheet))
 
+    def __getitem__(self, index):
+        if isinstance(index, list):
+            index = pd.Index(index)
+
+        new_instance = ImmunoPhenoData(self._protein_matrix)  # Create a new instance of the class
+        
+        for attr_name, attr_value in self.__dict__.items():
+            if isinstance(attr_value, pd.DataFrame):
+                setattr(new_instance, attr_name, attr_value.loc[index] if attr_value is not None else None)
+            elif isinstance(attr_value, anndata.AnnData):
+                obs_index = [i for i, obs in enumerate(attr_value.obs_names) if obs in index]
+                setattr(new_instance, attr_name, attr_value[obs_index] if attr_value is not None else None)
+            else:
+                setattr(new_instance, attr_name, attr_value)
+        
+        return new_instance
+
     @property
     def all_fits_dict(self):
         return self._all_fits_dict
@@ -1946,6 +1963,7 @@ class ImmunoPhenoData:
         elif self._gene_matrix is not None and self._cell_labels is None:
             z_umi = _z_avg_umi_sum(background_z_scores, self._gene_matrix)
             lin_reg = _linear_reg(z_umi)
+            self._linear_reg_df = lin_reg
 
             # Normalize all protein values
             normalized_df = _normalize_antibodies_df(
@@ -1971,3 +1989,4 @@ class ImmunoPhenoData:
         self._normalized_counts_df = normalized_df
         self._stvea_normalized_df = normalized_df.copy(deep=True).applymap(
                         lambda x: x + self._stvea_correction_value if x != 0 else x)
+        
