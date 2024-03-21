@@ -500,134 +500,88 @@ def _classify_cells(fit_results: dict,
 
     component_list = [x for x in range(best_num_mix)] # ex: [0, 1] or [0, 1, 2]
 
+    if best_num_mix == 1:
+        classified_cells = np.zeros_like(data_vector)
+        return list(classified_cells)
+
     if mix_model['model'] == 'negative binomial (MLE)':
         n_params = mix_model['nb_n_params']
         p_params = mix_model['nb_p_params']
+        nb_thetas = mix_model['nb_thetas']
 
-        # Given background component, find its associated parameters
         bg_n = n_params[bg_comp]
         bg_p = p_params[bg_comp]
+        tempThetas = nb_thetas.copy()
 
-        component_list.remove(bg_comp)
-
-        # comp1 will be the background component
-        comp1_probs = ss.nbinom.pmf(range(int(max(data_vector)) + 1),
-                                    bg_n,
-                                    bg_p)
-
-        # find the mode of the fitted background component
-        comp1_mode = _conv_np_mode(bg_n, bg_p)
+        component_list = [x for x in range(best_num_mix)]
 
         if best_num_mix == 3:
+            tempThetas.append(1 - nb_thetas[0] - nb_thetas[1])
+            
             comp2_index = component_list.pop(0)
-            comp2_probs = ss.nbinom.pmf(range(int(max(data_vector)) + 1),
-                                        n_params[comp2_index],
-                                        p_params[comp2_index])
+            comp2_theta = tempThetas[comp2_index]
+            comp2_probs = comp2_theta * ss.nbinom.pmf(data_vector, n_params[comp2_index], p_params[comp2_index])
 
             comp3_index = component_list.pop(0)
-            comp3_probs = ss.nbinom.pmf(range(int(max(data_vector)) + 1),
-                                        n_params[comp3_index],
-                                        p_params[comp3_index])
+            comp3_theta = tempThetas[comp3_index]
+            comp3_probs = comp3_theta * ss.nbinom.pmf(data_vector, n_params[comp3_index], p_params[comp3_index])
+
         elif best_num_mix == 2:
+            tempThetas.append(1 - nb_thetas[0])
+            
             comp2_index = component_list.pop(0)
-            comp2_probs = ss.nbinom.pmf(range(int(max(data_vector)) + 1),
-                                        n_params[comp2_index],
-                                        p_params[comp2_index])
+            comp2_theta = tempThetas[comp2_index]
+            comp2_probs = comp2_theta * ss.nbinom.pmf(data_vector, n_params[comp2_index], p_params[comp2_index])
 
-        # Iterate over each cell value for an antibody
-        for cell in data_vector:
-            # Convert to int
-            cell = int(cell)
+        bg_theta = tempThetas[bg_comp]
+        comp1_probs = bg_theta * ss.nbinom.pmf(data_vector, bg_n, bg_p)
+        comp1_mode = _conv_np_mode(bg_n, bg_p)
 
-            if best_num_mix == 3:
-                comp1_cell_prob = comp1_probs[cell]
-                comp2_cell_prob = comp2_probs[cell] + (0.5 - epsilon)
-                comp3_cell_prob = comp3_probs[cell] + (0.5 - epsilon)
+        max_probs = np.column_stack((comp1_probs, comp2_probs, comp3_probs)) if best_num_mix == 3 else np.column_stack((comp1_probs, comp2_probs))
 
-                cell_probs = [comp1_cell_prob, comp2_cell_prob, comp3_cell_prob]
-
-                if max(cell_probs) == comp1_cell_prob or cell < comp1_mode:
-                    classified_cells.append(0)
-                else:
-                    classified_cells.append(1)
-            elif best_num_mix == 2:
-                comp1_cell_prob = comp1_probs[cell]
-                comp2_cell_prob = comp2_probs[cell] + (0.5 - epsilon)
-
-                cell_probs = [comp1_cell_prob, comp2_cell_prob]
-
-                if max(cell_probs) == comp1_cell_prob or cell < comp1_mode:
-                    classified_cells.append(0)
-                else:
-                    classified_cells.append(1)
-            elif best_num_mix == 1:
-                # if just 1 component, classify all as background
-                classified_cells.append(0)
+        classified_cells = np.argmax(max_probs, axis=1)
+        classified_cells = np.where(np.logical_or(classified_cells == 0, data_vector < comp1_mode), 0, 1)
 
     elif mix_model['model'] == 'gaussian (EM)':
         gmm_means = mix_model['gmm_means']
         gmm_stdevs = mix_model['gmm_stdevs']
+        gmm_thetas = mix_model['gmm_thetas']
 
         bg_mean = gmm_means[bg_comp]
         bg_stdev = gmm_stdevs[bg_comp]
+        bg_theta = gmm_thetas[bg_comp]
 
-        component_list.remove(bg_comp)
+        component_list = [x for x in range(best_num_mix)]
 
-        # mode of background will be equal to the mean
         comp1_mode = bg_mean
 
         if best_num_mix == 3:
             comp2_index = component_list.pop(0)
             comp2_mean = gmm_means[comp2_index]
             comp2_stdev = gmm_stdevs[comp2_index]
+            comp2_theta = gmm_thetas[comp2_index]
 
             comp3_index = component_list.pop(0)
             comp3_mean = gmm_means[comp3_index]
             comp3_stdev = gmm_stdevs[comp3_index]
+            comp3_theta = gmm_thetas[comp3_index]
+
         elif best_num_mix == 2:
             comp2_index = component_list.pop(0)
             comp2_mean = gmm_means[comp2_index]
             comp2_stdev = gmm_stdevs[comp2_index]
+            comp2_theta = gmm_thetas[comp2_index]
 
-        # Iterate over each cell value for an antibody
-        for cell in data_vector:
-            # Convert to int
-            cell = int(cell)
+        comp1_cell_probs = bg_theta * ss.norm.pdf(data_vector, bg_mean, bg_stdev)
+        comp2_cell_probs = comp2_theta * ss.norm.pdf(data_vector, comp2_mean, comp2_stdev) + (0.5 - epsilon)
+        comp3_cell_probs = comp3_theta * ss.norm.pdf(data_vector, comp3_mean, comp3_stdev) + (0.5 - epsilon) if best_num_mix == 3 else None
 
-            if best_num_mix == 3:
-                comp1_cell_prob = ss.norm.pdf(cell,
-                                              bg_mean,
-                                              bg_stdev)
-                comp2_cell_prob = ss.norm.pdf(cell,
-                                              comp2_mean,
-                                              comp2_stdev) + (0.5 - epsilon)
-                comp3_cell_prob = ss.norm.pdf(cell,
-                                              comp3_mean,
-                                              comp3_stdev) + (0.5 - epsilon)
+        max_probs = np.column_stack((comp1_cell_probs, comp2_cell_probs, comp3_cell_probs)) if best_num_mix == 3 else np.column_stack((comp1_cell_probs, comp2_cell_probs))
 
-                cell_probs = [comp1_cell_prob, comp2_cell_prob, comp3_cell_prob]
+        classified_cells = np.argmax(max_probs, axis=1)
+        classified_cells = np.where(np.logical_or(classified_cells == 0, data_vector < comp1_mode), 0, 1)
 
-                if max(cell_probs) == comp1_cell_prob or cell < comp1_mode:
-                    classified_cells.append(0)
-                else:
-                    classified_cells.append(1)
-            elif best_num_mix == 2:
-                comp1_cell_prob = ss.norm.pdf(cell,
-                                              bg_mean,
-                                              bg_stdev)
-                comp2_cell_prob = ss.norm.pdf(cell,
-                                              comp2_mean,
-                                              comp2_stdev) + (0.5 - epsilon)
-                cell_probs = [comp1_cell_prob, comp2_cell_prob]
-
-                if max(cell_probs) == comp1_cell_prob or cell < comp1_mode:
-                    classified_cells.append(0)
-                else:
-                    classified_cells.append(1)
-            elif best_num_mix == 1:
-                classified_cells.append(0)
-
-    return classified_cells
+    return list(classified_cells)
 
 def _classify_cells_df(fit_all_results: dict,
                        protein_data: pd.DataFrame) -> pd.DataFrame:
