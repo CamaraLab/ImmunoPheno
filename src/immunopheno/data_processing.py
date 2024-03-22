@@ -1419,6 +1419,9 @@ class ImmunoPhenoData:
         self._all_fits = None
         self._all_fits_dict = None
         self._cumulative = False
+        self._last_normalize_params = None
+        self._raw_umap = None
+        self._norm_umap = None
         self._normalized_counts_df = None
         self._classified_filt_df = None
         self._cell_labels_filt_df = None
@@ -1832,6 +1835,16 @@ class ImmunoPhenoData:
             cumulative (bool): flag to indicate whether to return the 
                 cumulative distribution probabilities
         """
+
+        # Check if parameters have changed
+        if (p_threshold, sig_expr_threshold, 
+            bg_expr_threshold, bg_cell_z_score, cumulative) != self._last_normalize_params:
+            # If so, reset UMAP stored in class
+            self._norm_umap = None
+            # Update the parameters
+            self._last_normalized_params = (p_threshold, sig_expr_threshold, 
+                                            bg_expr_threshold, bg_cell_z_score, cumulative)
+        
         bg_cell_z_score = -bg_cell_z_score
         if self._all_fits is None:
             raise EmptyAntibodyFitsError("No fits found for each antibody. Please "
