@@ -796,19 +796,29 @@ class ImmunoPhenoDB_Connect:
     
         transferred_labels = cn.stvea.codex_cluster_names_transferred
         
-        # Add these labels to the IPD object
-        IPD._cell_labels_filt_df = transferred_labels.to_frame(name="labels")
-
-        # Map cell type to cell ID
+        # Add the labels to the IPD object
+        labels_df = transferred_labels.to_frame(name="labels")
         convert_idCL = {
-            "idCL": list(set(IPD._cell_labels_filt_df['labels']))
+            "idCL": list(set(labels_df['labels']))
         }
-
         convert_idCL_res = requests.post(f"{self.url}/api/convertcelltype", json=convert_idCL)
-        idCL_names = convert_idCL_res.json()["results"]       
+        idCL_names = convert_idCL_res.json()["results"]     
+        labels_df['celltype'] = labels_df['labels'].map(idCL_names)
+        
+        # Before setting norm_cell_types, check if it matches the previous. If not, reset norm_umap field
+        if not (labels_df.equals(IPD._cell_labels_filt_df)):
+            IPD._norm_umap = None
+        IPD._cell_labels_filt_df = labels_df
+        
+        # Add labels to raw cell labels as well. The filtered rows will be marked as "filtered"
+        original_cells_index = IPD.protein.index
+        merged_df = IPD._cell_labels_filt_df.reindex(original_cells_index)
+        merged_df = merged_df.fillna("filtered")
 
-        # Apply new column
-        IPD._cell_labels_filt_df['celltype'] = IPD._cell_labels_filt_df['labels'].map(idCL_names)
+        # Check if the raw and norm labels have changed. If so, reset the UMAP field in IPD
+        if not (merged_df.equals(IPD._cell_labels)):
+            IPD._raw_umap = None
+        IPD._cell_labels = merged_df
 
         # Make sure the indexes match
         IPD._normalized_counts_df = IPD._normalized_counts_df.loc[IPD._cell_labels_filt_df.index]
