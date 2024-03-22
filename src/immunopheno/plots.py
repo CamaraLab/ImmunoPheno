@@ -35,54 +35,78 @@ def plot_UMAP(IPD,
         UMAP projection of non/normalized protein values with a corresponding
         legend of cell type (if available)
     """
-    umap_plot = umap.UMAP(random_state=0)
-    if normalized:
-        try:
-            projections = umap_plot.fit_transform(IPD.normalized_counts)
-        except:
-            raise PlotUMAPError("Cannot plot normalized UMAP. "
-                            "normalize_all_antibodies() must be called first.")
+    # Check if existing UMAP is present in class
+    if IPD._raw_umap is not None and normalized is False:
+        # If so, return the stored UMAP
+        return IPD._raw_umap
+    elif IPD._norm_umap is not None and normalized is True:
+        return IPD._norm_umap
     else:
-        projections = umap_plot.fit_transform(IPD.protein)
-    
-    if IPD.norm_cell_labels is not None and normalized:
-        # Check the number of columns
-        num_columns = IPD.norm_cell_labels.shape[1]
-        # Check if there is at least one column and if the second column is not empty
-        if num_columns > 1 and not IPD.norm_cell_labels.iloc[:, 1].isnull().all():
-            # Use the values from the second column
-            raw_types = IPD.norm_cell_labels.iloc[:, 1].tolist()
+        # If no UMAP, generate a new one and store in class
+        umap_plot = umap.UMAP(random_state=0)
+        if normalized:
+            try:
+                norm_projections = umap_plot.fit_transform(IPD.normalized_counts)
+            except:
+                raise PlotUMAPError("Cannot plot normalized UMAP. "
+                                "normalize_all_antibodies() must be called first.")
         else:
-            # If there is no second column or it is empty, use the values from the first column
-            raw_types = IPD.norm_cell_labels.iloc[:, 0].tolist()
+            raw_projections = umap_plot.fit_transform(IPD.protein)
+        
+        # Normalized UMAP without cell labels
+        if IPD.norm_cell_labels is None and normalized:
+            norm_plot = px.scatter(
+                norm_projections, x=0, y=1,
+            )
+            IPD._norm_umap = norm_plot
+            return norm_plot
+        
+        # Un-normalized UMAP without cell labels
+        elif IPD.raw_cell_labels is None and not normalized:
+            raw_plot = px.scatter(
+                raw_projections, x=0, y=1,
+            )
+            IPD._raw_umap = raw_plot
+            return raw_plot
 
-        norm_plot = px.scatter(
-            projections, x=0, y=1,
-            color_discrete_sequence=px.colors.qualitative.Dark24,
-            color=[str(cell_type) for cell_type in raw_types],
-            labels={'color':'cell type'}
-        )
-        return norm_plot
-    elif IPD.raw_cell_labels is not None and not normalized:
-        # Check the number of columns
-        num_columns = IPD.raw_cell_labels.shape[1]
-        # Check if there is at least one column and if the second column is not empty
-        if num_columns > 1 and not IPD.raw_cell_labels.iloc[:, 1].isnull().all():
-            # Use the values from the second column
-            raw_types = IPD.raw_cell_labels.iloc[:, 1].tolist()
-        else:
-            # If there is no second column or it is empty, use the values from the first column
-            raw_types = IPD.raw_cell_labels.iloc[:, 0].tolist()
-            
-        reg_plot = px.scatter(
-            projections, x=0, y=1,
-            color_discrete_sequence=px.colors.qualitative.Dark24,
-            color=[str(cell_type) for cell_type in raw_types],
-            labels={'color':'cell type'}
-        )
-        return reg_plot
-    else:
-        norm_plot = px.scatter(
-            projections, x=0, y=1,
-        )
-        return norm_plot
+        # Normalized UMAP plot with cell labels
+        if IPD.norm_cell_labels is not None and normalized:
+            # Check the number of columns
+            num_columns = IPD.norm_cell_labels.shape[1]
+            # Check if there is at least one column and if the second column is not empty
+            if num_columns > 1 and not IPD.norm_cell_labels.iloc[:, 1].isnull().all():
+                # Use the values from the second column
+                raw_types = IPD.norm_cell_labels.iloc[:, 1].tolist()
+            else:
+                # If there is no second column or it is empty, use the values from the first column
+                raw_types = IPD.norm_cell_labels.iloc[:, 0].tolist()
+
+            norm_plot = px.scatter(
+                norm_projections, x=0, y=1,
+                color_discrete_sequence=px.colors.qualitative.Dark24,
+                color=[str(cell_type) for cell_type in raw_types],
+                labels={'color':'cell type'}
+            )
+            IPD._norm_umap = norm_plot
+            return norm_plot
+        
+        # Not normalized UMAP plot with cell labels
+        elif IPD.raw_cell_labels is not None and not normalized:
+            # Check the number of columns
+            num_columns = IPD.raw_cell_labels.shape[1]
+            # Check if there is at least one column and if the second column is not empty
+            if num_columns > 1 and not IPD.raw_cell_labels.iloc[:, 1].isnull().all():
+                # Use the values from the second column
+                raw_types = IPD.raw_cell_labels.iloc[:, 1].tolist()
+            else:
+                # If there is no second column or it is empty, use the values from the first column
+                raw_types = IPD.raw_cell_labels.iloc[:, 0].tolist()
+                
+            reg_plot = px.scatter(
+                raw_projections, x=0, y=1,
+                color_discrete_sequence=px.colors.qualitative.Dark24,
+                color=[str(cell_type) for cell_type in raw_types],
+                labels={'color':'cell type'}
+            )
+            IPD._raw_umap = reg_plot
+            return reg_plot
