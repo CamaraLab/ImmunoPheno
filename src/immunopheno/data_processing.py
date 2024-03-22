@@ -1433,7 +1433,6 @@ class ImmunoPhenoData:
         # Used when sending data to the server for running STvEA
         self._background_cell_z_score = -10
         self._stvea_correction_value = 0
-        self._stvea_normalized_df = None
 
         # If loading in a scanpy object
         if scanpy is not None:
@@ -1862,8 +1861,8 @@ class ImmunoPhenoData:
             not 0 <= bg_expr_threshold <= 1):
             raise BoundsThresholdError("threshold must lie between 0 and 1 (inclusive)")
 
-        if not bg_cell_z_score < 0:
-            raise BackgroundZScoreError("bg_cell_z_score must be less than 0")
+        # if not bg_cell_z_score < 0:
+        #     raise BackgroundZScoreError("bg_cell_z_score must be less than 0")
 
         warnings.filterwarnings('ignore')
         # Classify all cells as either background or signal
@@ -1954,6 +1953,4 @@ class ImmunoPhenoData:
                                     cumulative=cumulative)
         
         self._normalized_counts_df = normalized_df
-        self._stvea_normalized_df = normalized_df.copy(deep=True).applymap(
-                        lambda x: x + self._stvea_correction_value if x != 0 else x)
         
