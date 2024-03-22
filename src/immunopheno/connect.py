@@ -733,7 +733,7 @@ class ImmunoPhenoDB_Connect:
                   mask: bool = True):
 
         # Check if reference query parameters have changed OR if the reference table is empty
-        if (IPD, idBTO, idExperiment, 
+        if (IPD, IPD._stvea_correction_value, idBTO, idExperiment, 
             parse_option, pairwise_threshold, 
             na_threshold, population_size) != self._last_stvea_params or self.imputed_reference is None:
 
@@ -760,10 +760,13 @@ class ImmunoPhenoDB_Connect:
             # Impute any missing values in reference dataset
             print("Imputing missing values...")
             imputed_reference = impute_dataset(reference_dataset) 
-            self.imputed_reference = imputed_reference
+
+            # Apply stvea_correction value
+            self.imputed_reference = imputed_reference.copy(deep=True).applymap(
+                        lambda x: x - IPD._stvea_correction_value if (x != 0 and type(x) is not str) else x)
 
             # Store these parameters to check for subsequent function calls
-            self._last_stvea_params = (IPD, idBTO, idExperiment, 
+            self._last_stvea_params = (IPD, IPD._stvea_correction_value, idBTO, idExperiment, 
                                        parse_option, pairwise_threshold, 
                                        na_threshold, population_size)
 
@@ -772,7 +775,7 @@ class ImmunoPhenoDB_Connect:
         imputed_idCLs = self.imputed_reference['idCL'].to_frame()
     
         # Convert antibody names from CODEX normalized counts to their IDs
-        codex_normalized_with_ids = IPD._stvea_normalized_df.rename(columns=IPD._ab_ids_dict, inplace=False)
+        codex_normalized_with_ids = IPD._normalized_counts_df.rename(columns=IPD._ab_ids_dict, inplace=False)
     
         # Perform check for rows/columns with all 0s or NAs
         codex_normalized_with_ids = remove_all_zeros_or_na(codex_normalized_with_ids)
