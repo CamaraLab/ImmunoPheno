@@ -17,6 +17,7 @@ from tqdm.autonotebook import tqdm
 from .models import _gmm_results, _nb_mle_results
 from sklearn.linear_model import LinearRegression
 from itertools import zip_longest
+import requests
 
 def _load_adt(protein: str | pd.DataFrame) -> pd.DataFrame:
     """
@@ -1331,6 +1332,53 @@ def _normalize_antibodies_df(protein_cleaned_filt_df: pd.DataFrame,
 
     return normalized_df_transpose
 
+def convert_idCL_readable(idCL:str) -> str:
+    """
+    Converts a cell ontology id (CL:XXXXXXX) into a readable cell type name
+
+    Parameters:
+        idCL (str): cell ontology ID
+
+    Returns:
+        cellType (str): readable cell type name
+        
+    """
+    idCL_params = {
+        'q': idCL,
+        'exact': 'true',
+        'ontology': 'cl',
+        'fieldList': 'label',
+        'rows': 1,
+        'start': 0
+    }
+    
+    res = requests.get("https://www.ebi.ac.uk/ols4/api/search", params=idCL_params)
+    res_JSON = res.json()
+    cellType = res_JSON['response']['docs'][0]['label']
+    
+    return cellType
+
+def ebi_idCL_map(labels_df: pd.DataFrame) -> dict:
+    """
+    Converts a list of cell ontology IDs into readable cell type names
+    as a dictionary
+
+    Parameters:
+        labels_df (pd.DataFrame): dataframe with cell labels from singleR
+    
+    Returns:
+        idCL_map (dict) : dictionary mapping cell ontology ID to cell type
+    
+    """
+    idCL_map = {}
+
+    idCLs = set(labels_df["labels"])
+    
+    for idCL in idCLs:
+        idCL_map[idCL] = convert_idCL_readable(idCL)
+    
+    return idCL_map
+
 class ImmunoPhenoError(Exception):
     """A base class for ImmunoPheno Exceptions."""
 
@@ -1580,6 +1628,33 @@ class ImmunoPhenoData:
         self._cell_labels = self._temp_labels
         self._label_certainties = self._temp_certainties
 
+    def convert_labels(self):
+        # First, check that the raw cell types table exists
+        if self.raw_cell_labels is not None and isinstance(self.raw_cell_labels, pd.DataFrame):
+            # Check if the "labels" column exists
+            if "labels" in self.raw_cell_labels:
+                # Create mapping dictionary using values in the "labels" field
+                labels_map = ebi_idCL_map(self.raw_cell_labels)
+
+                # Map all values from dictionary back onto the "celltype" field
+                temp_df = self.raw_cell_labels.copy(deep=True)
+                temp_df['celltype'] = temp_df['labels'].map(labels_map)
+                
+                # Set new table
+                self.raw_cell_labels = temp_df
+
+                # Check if normalized cell types exist. If so, repeat above
+                if self.norm_cell_labels is not None and isinstance(self.norm_cell_labels, pd.DataFrame):
+                    norm_temp_df = self.norm_cell_labels.copy(deep=True)
+                    norm_temp_df['celltype'] = norm_temp_df['labels'].map(labels_map)
+
+                    # Set new table
+                    self._cell_labels_filt_df = norm_temp_df
+            else:
+                raise Exception("Table does not contain 'labels' column")
+        else:
+            raise Exception("No cell labels found. Please provide a table with a 'labels' column.")
+        
     def update_index(self,
                      index: list):
         """
