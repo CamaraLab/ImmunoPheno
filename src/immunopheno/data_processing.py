@@ -777,8 +777,12 @@ def _z_scores_df(fit_all_results: dict,
 
     for index, ab in enumerate(protein_data):
         # Classify cells in vector as either background or signal
-        z_score_vector = _z_scores(fit_all_results[ab],
-                                  protein_data.loc[:, ab])
+        try:
+            z_score_vector = _z_scores(fit_all_results[ab], 
+                                    protein_data.loc[:, ab])
+        except:
+            raise Exception(f"No background cells found for {ab}. " 
+                            f"Please adjust fits for {ab} with select_mixture_model().")
 
         z_score_matrix.append(z_score_vector)
 
