@@ -21,7 +21,8 @@ def plot_antibody_correlation(IPD):
     g.ax_cbar.set_position((1, .2, .03, .4))
  
 def plot_UMAP(IPD,
-              normalized: bool = False):
+              normalized: bool = False,
+              **kwargs):
     """ 
     Plots a UMAP for the non-normalized protein values or normalized protein
     values
@@ -30,20 +31,29 @@ def plot_UMAP(IPD,
         IPD (ImmunoPhenoData Object): Object containing protein data,
             gene data, and cell types
         normalized (bool): option to plot normalized values
+        **kwargs: various arguments to UMAP class constructor, including default values:
+            n_neighbors (int): 15
+            min_dist (float): 0.1 
+            n_components (int): 2
+            metric (str): "euclidean"
 
     Returns:
         UMAP projection of non/normalized protein values with a corresponding
         legend of cell type (if available)
     """
-    # Check if existing UMAP is present in class
-    if IPD._raw_umap is not None and normalized is False:
+    # Check if existing UMAP is present in class AND UMAP parameters have not changed
+    if (IPD._umap_kwargs == kwargs and IPD._raw_umap is not None) and normalized is False:
         # If so, return the stored UMAP
         return IPD._raw_umap
-    elif IPD._norm_umap is not None and normalized is True:
+    elif (IPD._umap_kwargs == kwargs and IPD._norm_umap is not None) and normalized is True:
         return IPD._norm_umap
     else:
-        # If no UMAP, generate a new one and store in class
-        umap_plot = umap.UMAP(random_state=0)
+        # If no UMAP or kwargs are different, generate a new one and store in class
+        umap_plot = umap.UMAP(random_state=0, **kwargs)
+
+        # Store new kwargs in class
+        IPD._umap_kwargs = kwargs
+        
         if normalized:
             try:
                 norm_projections = umap_plot.fit_transform(IPD.normalized_counts)
