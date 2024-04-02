@@ -712,6 +712,19 @@ class ImmunoPhenoDB_Connect:
             res_JSON = wc_response.json()
             res_df = pd.DataFrame.from_dict(res_JSON)
             return res_df
+    
+    def which_experiments(self,
+                          search_query: str) -> pd.DataFrame:
+        we_body = {
+            "search_query": search_query
+        }
+        we_response = requests.post(f"{self.url}/api/whichexperiments", json=we_body)
+        if 'text/html' in we_response.headers.get('content-type'):
+            return we_response.text
+        elif 'application/json' in we_response.headers.get('content-type'):
+            res_JSON = we_response.json()
+            res_df = pd.DataFrame.from_dict(res_JSON)
+            return res_df
 
     def run_stvea(self,
                   IPD,
