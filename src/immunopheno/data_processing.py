@@ -1474,6 +1474,7 @@ class ImmunoPhenoData:
         self._last_normalize_params = None
         self._raw_umap = None
         self._norm_umap = None
+        self._umap_kwargs = None
         self._normalized_counts_df = None
         self._classified_filt_df = None
         self._cell_labels_filt_df = None
