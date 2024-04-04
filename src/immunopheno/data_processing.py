@@ -514,7 +514,7 @@ def _classify_cells(fit_results: dict,
         bg_p = p_params[bg_comp]
         tempThetas = nb_thetas.copy()
 
-        component_list = [x for x in range(best_num_mix)]
+        component_list.remove(bg_comp)
 
         if best_num_mix == 3:
             tempThetas.append(1 - nb_thetas[0] - nb_thetas[1])
@@ -552,7 +552,7 @@ def _classify_cells(fit_results: dict,
         bg_stdev = gmm_stdevs[bg_comp]
         bg_theta = gmm_thetas[bg_comp]
 
-        component_list = [x for x in range(best_num_mix)]
+        component_list.remove(bg_comp)
 
         comp1_mode = bg_mean
 
