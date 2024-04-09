@@ -418,6 +418,7 @@ class ImmunoPhenoDB_Connect:
         self._db_idCL_names = None
         self._last_stvea_params = None
         self.imputed_reference = None
+        self.transfer_matrix = None
 
         if self.url is None:
             raise Exception("Error. Server URL must be provided")
@@ -809,7 +810,11 @@ class ImmunoPhenoDB_Connect:
                      c_transfer_matrix=c_transfer_matrix,
                      mask_threshold=mask_threshold,
                      mask=mask)
-    
+
+        # Store transfer_matrix in class
+        transfer_matrix = cn.stvea.transfer_matrix
+        self.transfer_matrix = transfer_matrix
+        
         transferred_labels = cn.stvea.codex_cluster_names_transferred
         
         # Add the labels to the IPD object
