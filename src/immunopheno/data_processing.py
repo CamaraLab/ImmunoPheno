@@ -1644,6 +1644,9 @@ class ImmunoPhenoData:
                 # Map all values from dictionary back onto the "celltype" field
                 temp_df = self.raw_cell_labels.copy(deep=True)
                 temp_df['celltype'] = temp_df['labels'].map(labels_map)
+
+                # Ensure all "labels" follow the format of "CL:XXXXXXX"
+                temp_df["labels"] = temp_df["labels"].str.replace(r'^CL_([0-9]+)$', r'CL:\1')
                 
                 # Set new table
                 self.raw_cell_labels = temp_df
@@ -1652,6 +1655,9 @@ class ImmunoPhenoData:
                 if self.norm_cell_labels is not None and isinstance(self.norm_cell_labels, pd.DataFrame):
                     norm_temp_df = self.norm_cell_labels.copy(deep=True)
                     norm_temp_df['celltype'] = norm_temp_df['labels'].map(labels_map)
+
+                    # Ensure all "labels" follow the format of "CL:XXXXXXX"
+                    norm_temp_df["labels"] = norm_temp_df["labels"].str.replace(r'^CL_([0-9]+)$', r'CL:\1')
 
                     # Set new table
                     self._cell_labels_filt_df = norm_temp_df
