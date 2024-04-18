@@ -9,6 +9,7 @@ from scipy.spatial import KDTree
 from scipy.sparse import csr_matrix
 from scipy.sparse import coo_matrix
 from sklearn.neighbors import NearestNeighbors
+from multiprocessing import Pool
 
 def remove_all_zeros_or_na(protein_df):
     # Check if any row in the DataFrame has all NAs or all zeros
@@ -670,49 +671,57 @@ class Mapping:
         end = time.time()
         print(f"transform_data_matrix Time: {round(end - start, 3)} sec")
         return
-
-    def map_codex_to_cite(self,
-                          k_find_nn=80,
-                          k_find_anchor=20,
-                          k_filter_anchor=100,
-                          k_score_anchor=80,
-                          k_find_weights=100,
-                          nn_option=2):
+    
+    @staticmethod
+    def transform_data_matrix_parallel(query_mat, integration_matrix, weights, stvea):
         """
-        This function will calibrate CODEX protein expression levels to CITE-seq protein expression levels.
-        Wrap up all functions in this class.
+        This function will generate the corrected protein expression matrix.
+        @param stvea: a STvEA object.
+        @param query_mat: a (cell x feature) protein expression matrix to be corrected.
+        @param integration_matrix: matrix of anchor vectors (output of find_integration_matrix).
+        @param weights: weights of the anchors of each query cell.
+        @return: a corrected query cell protein expression matrix.
         """
-        # find common proteins
         start = time.time()
+        integration_matrix.index = weights.columns
+        bv = weights.dot(integration_matrix)
+        bv.index = query_mat.index
+        integrated = query_mat - bv
+        end = time.time()
+        print(f"transform_data_matrix Time: {round(end - start, 3)} sec")
+        return integrated
+    
+    # Define process_chunk function
+    def process_chunk(self, 
+                      chunk_idx, 
+                      k_find_nn, 
+                      k_find_anchor, 
+                      k_filter_anchor, 
+                      k_score_anchor,
+                      k_find_weights, 
+                      nn_option):
+                          
         common_protein = [protein for protein in self.stvea.codex_protein.columns if
                           protein in self.stvea.cite_protein.columns]
-
-        if len(common_protein) < 2:
-            # for STvEA to properly transfer value from CODEX to CITE.
-            # enough proteins are required.
-            print("Too few common proteins between CODEX proteins and CITE-seq proteins")
-            exit(1)
-
-        # select common protein columns
+        
         codex_subset = self.stvea.codex_protein.loc[:, common_protein]
         cite_subset = self.stvea.cite_protein.loc[:, common_protein]
-
-        # Final filter for any rows/columns that are all 0s/NAs
+    
         codex_subset = remove_all_zeros_or_na(codex_subset)
         cite_subset = remove_all_zeros_or_na(cite_subset)
-
-        # construct common CCA space.
-        cca_data = Mapping.run_cca(cite_subset.T, codex_subset.T, True, num_cc=len(common_protein) - 1)
-
-        cite_count = cite_subset.shape[0]
-        # find the nearest neighbors
-        # return a dict {'nn_rr': nn_rr, 'nn_rq': nn_rq, 'nn_qr': nn_qr, 'nn_qq': nn_qq,
-        #                 'cellsr': ref_emb.index.values, 'cellsq': query_emb.index.values}
 
         if self.stvea.cite_latent.shape != (0, 0):
             cite_latent = self.stvea.cite_latent
         else:
             cite_latent = self.stvea.cite_protein
+                      
+        chunk = codex_subset.loc[chunk_idx]
+        print("Processing chunk of size: ", len(chunk_idx))
+        
+        # construct common CCA space for the chunk
+        cca_data = Mapping.run_cca(cite_subset.T, chunk.T, True, num_cc=len(common_protein) - 1)
+
+        cite_count = cite_subset.shape[0]
 
         neighbors = Mapping.find_nn_rna(ref_emb=cca_data.iloc[:cite_count, :],
                                         query_emb=cca_data.iloc[cite_count:, :],
@@ -722,19 +731,137 @@ class Mapping:
 
         anchors = Mapping.find_anchor_pairs(neighbors, k_find_anchor)
 
-        anchors = Mapping.filter_anchors(cite_subset, codex_subset, anchors, k_filter_anchor, nn_option=nn_option)
+        anchors = Mapping.filter_anchors(cite_subset, chunk, anchors, k_filter_anchor, nn_option=nn_option)
 
         anchors = Mapping.score_anchors(neighbors, anchors, len(neighbors["nn_rr"]["nn_idx"]),
                                         len(neighbors["nn_qq"]["nn_idx"]), k_score_anchor)
 
-        integration_matrix = Mapping.find_integration_matrix(cite_subset, codex_subset, neighbors, anchors)
+        integration_matrix = Mapping.find_integration_matrix(cite_subset, chunk, neighbors, anchors)
 
-        weights = Mapping.find_weights(neighbors, anchors, codex_subset, k_find_weights, nn_option=nn_option)
+        weights = Mapping.find_weights(neighbors, anchors, chunk, k_find_weights, nn_option=nn_option)
 
-        Mapping.transform_data_matrix(codex_subset, integration_matrix, weights, self.stvea)
+        return Mapping.transform_data_matrix_parallel(chunk, integration_matrix, weights, self.stvea)
 
-        end = time.time()
-        print(f"map_codex_to_cite: {round(end - start, 3)}")
+    @staticmethod
+    def dynamic_chunking(index, num_chunks):
+        num_rows = len(index)
+        base_chunk_size = num_rows // num_chunks
+        remainder = num_rows % num_chunks
+    
+        chunks = []
+        start_idx = 0
+        for i in range(num_chunks):
+            chunk_size = base_chunk_size + 1 if i < remainder else base_chunk_size
+            end_idx = start_idx + chunk_size
+            chunks.append((index[start_idx:end_idx]))
+            start_idx = end_idx
+    
+        return chunks
+    
+    def map_codex_to_cite(self,
+                          k_find_nn=80,
+                          k_find_anchor=20,
+                          k_filter_anchor=100,
+                          k_score_anchor=80,
+                          k_find_weights=100,
+                          nn_option=2,
+                          num_chunks=1,  # Defaulting to 1 chunk, 1 core
+                          num_cores=1):
+        """
+        This function will calibrate CODEX protein expression levels to CITE-seq protein expression levels.
+        Wrap up all functions in this class.
+        """
+        start = time.time()
+
+        if num_chunks == 1:
+            # find common proteins
+            common_protein = [protein for protein in self.stvea.codex_protein.columns if
+                              protein in self.stvea.cite_protein.columns]
+    
+            if len(common_protein) < 2:
+                # for STvEA to properly transfer value from CODEX to CITE.
+                # enough proteins are required.
+                print("Too few common proteins between CODEX proteins and CITE-seq proteins")
+                exit(1)
+    
+            # select common protein columns
+            codex_subset = self.stvea.codex_protein.loc[:, common_protein]
+            cite_subset = self.stvea.cite_protein.loc[:, common_protein]
+    
+            # Final filter for any rows/columns that are all 0s/NAs
+            codex_subset = remove_all_zeros_or_na(codex_subset)
+            cite_subset = remove_all_zeros_or_na(cite_subset)
+    
+            # construct common CCA space.
+            cca_data = Mapping.run_cca(cite_subset.T, codex_subset.T, True, num_cc=len(common_protein) - 1)
+    
+            cite_count = cite_subset.shape[0]
+            # find the nearest neighbors
+            # return a dict {'nn_rr': nn_rr, 'nn_rq': nn_rq, 'nn_qr': nn_qr, 'nn_qq': nn_qq,
+            #                 'cellsr': ref_emb.index.values, 'cellsq': query_emb.index.values}
+    
+            if self.stvea.cite_latent.shape != (0, 0):
+                cite_latent = self.stvea.cite_latent
+            else:
+                cite_latent = self.stvea.cite_protein
+    
+            neighbors = Mapping.find_nn_rna(ref_emb=cca_data.iloc[:cite_count, :],
+                                            query_emb=cca_data.iloc[cite_count:, :],
+                                            rna_mat=cite_latent,
+                                            k=k_find_nn,
+                                            nn_option=nn_option)
+    
+            anchors = Mapping.find_anchor_pairs(neighbors, k_find_anchor)
+    
+            anchors = Mapping.filter_anchors(cite_subset, codex_subset, anchors, k_filter_anchor, nn_option=nn_option)
+    
+            anchors = Mapping.score_anchors(neighbors, anchors, len(neighbors["nn_rr"]["nn_idx"]),
+                                            len(neighbors["nn_qq"]["nn_idx"]), k_score_anchor)
+    
+            integration_matrix = Mapping.find_integration_matrix(cite_subset, codex_subset, neighbors, anchors)
+    
+            weights = Mapping.find_weights(neighbors, anchors, codex_subset, k_find_weights, nn_option=nn_option)
+    
+            Mapping.transform_data_matrix(codex_subset, integration_matrix, weights, self.stvea)
+    
+            end = time.time()
+            print(f"map_codex_to_cite: {round(end - start, 3)}")
+        
+        else:
+            common_protein = [protein for protein in self.stvea.codex_protein.columns if
+                              protein in self.stvea.cite_protein.columns]
+        
+            if len(common_protein) < 2:
+                print("Too few common proteins between CODEX proteins and CITE-seq proteins")
+                exit(1)
+    
+            # Shuffle the index of codex_subset
+            codex_subset = self.stvea.codex_protein.loc[:, common_protein]
+            codex_subset = remove_all_zeros_or_na(codex_subset)
+                              
+            shuffled_index = np.random.permutation(codex_subset.index)
+            codex_subset_shuffled = codex_subset.reindex(shuffled_index)
+                
+            # Split codex_subset_shuffled into chunks
+            chunks = Mapping.dynamic_chunking(codex_subset_shuffled.index, num_chunks)
+            
+            # Process chunks in parallel
+            with Pool(processes=num_cores) as pool:
+                results = pool.starmap(self.process_chunk, [(chunk, 
+                                                             k_find_nn, 
+                                                             k_find_anchor, 
+                                                             k_filter_anchor, 
+                                                             k_score_anchor, 
+                                                             k_find_weights, 
+                                                             nn_option) for chunk in chunks])
+            
+            end = time.time()
+            print(f"map_codex_to_cite: {round(end - start, 3)}")
+    
+            # Concatenate the DataFrames along the row axis
+            combined_df = pd.concat(results, axis=0)
+    
+            self.stvea.codex_protein_corrected = combined_df
 
     def transfer_matrix(self,
                         k=None,
