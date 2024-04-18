@@ -744,7 +744,9 @@ class ImmunoPhenoDB_Connect:
                   k_transfer_matrix = None,
                   c_transfer_matrix: float = 0.1,
                   mask_threshold: float = 0.5,
-                  mask: bool = True):
+                  mask: bool = True,
+                  num_chunks=1,
+                  num_cores=1):
 
         # Check if reference query parameters have changed OR if the reference table is empty
         if (IPD, IPD._stvea_correction_value, idBTO, idExperiment, 
@@ -809,7 +811,9 @@ class ImmunoPhenoDB_Connect:
                      k_transfer_matrix=k_transfer_matrix,
                      c_transfer_matrix=c_transfer_matrix,
                      mask_threshold=mask_threshold,
-                     mask=mask)
+                     mask=mask,
+                     num_chunks=num_chunks,
+                     num_cores=num_cores)
 
         # Store transfer_matrix in class
         transfer_matrix = cn.stvea.transfer_matrix
