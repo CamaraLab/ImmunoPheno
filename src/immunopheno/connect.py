@@ -339,25 +339,50 @@ def remove_all_zeros_or_na(protein_df):
     # Display the modified DataFrame
     return filtered_df
 
-def impute_dataset(downsampled_df):
-    # Get all antibodies from dataframe
-    ab_columns = [ab for ab in downsampled_df.columns if (ab != 'idCL' and ab != 'idExperiment')]
+def impute_dataset_by_type(downsampled_df):
+    # Find all unique idCLs in the table
+    unique_idCLs = list(set(downsampled_df['idCL']))
 
-    # format_df will have missing values (NaNs) for some antibodies
-    # Subset the columns out containing the antibodies only
-    antibody_df = downsampled_df[ab_columns].to_numpy()
-                               
-    # Impute these values in using KNN
-    imputer = KNNImputer(n_neighbors=10, weights="distance")
-    imputed_np = imputer.fit_transform(antibody_df)
+    imputed_dataframes = []
+    
+    # For each idCL, find the rows in the table
+    for idCL in unique_idCLs:
+        subtable = downsampled_df.loc[downsampled_df['idCL'] == idCL]
 
-    # Put these imputed values back into the dataframe
-    imputed_df = pd.DataFrame(imputed_np, index=downsampled_df.index, columns=ab_columns)
+        # Get all antibody values from this table (exclude last two columns). This is what will be imputed
+        remaining_ab = [ab for ab in subtable.columns if (ab != 'idCL' and ab != 'idExperiment')]
+        subtable_ab_to_impute = subtable[remaining_ab]
 
-    # Add the idCL column back in at the end
-    combined_impute = pd.concat([imputed_df, downsampled_df['idCL']], axis=1)
+        # Handle cases where a column (antibody) is all NaN
+        subtable_ab_drop = subtable_ab_to_impute.dropna(axis="columns", how="all")
 
-    return combined_impute
+        # Dynamically adjust k. If num cells in table < 10, set k = num cells
+        # Otherwise, k will be 10 by default
+        if (len(subtable_ab_drop)) < 10:
+            k = len(subtable_ab_drop)
+        else:
+            k = 10
+
+        # Impute the values in
+        imputer = KNNImputer(n_neighbors=k, weights="distance")
+        imputed_np = imputer.fit_transform(subtable_ab_drop.to_numpy())
+        
+        # Put these imputed values back into the dataframe
+        imputed_df = pd.DataFrame(imputed_np, index=subtable_ab_drop.index, columns=subtable_ab_drop.columns)
+        imputed_dataframes.append(imputed_df)
+
+    # Combine all imputed dataframes back to each other by row
+    combined_imputed_df = pd.concat(imputed_dataframes, axis=0)
+
+    # For antibodies that still have NAs after imputation, drop them
+    combined_imputed_dropped_df = combined_imputed_df.dropna(axis="columns", how="any")
+
+    # Retrieve all the idCLs again for all the cells
+    combined_imputed_dropped_idCLs = downsampled_df.loc[combined_imputed_dropped_df.index]["idCL"]
+    combined_imputed_df_with_idCL = pd.concat([combined_imputed_dropped_df, combined_imputed_dropped_idCLs], axis=1)
+    
+    return combined_imputed_df_with_idCL
+
 
 def convert_idCL_readable(idCL:str) -> str:
     """
@@ -775,7 +800,7 @@ class ImmunoPhenoDB_Connect:
         
             # Impute any missing values in reference dataset
             print("Imputing missing values...")
-            imputed_reference = impute_dataset(reference_dataset) 
+            imputed_reference = impute_dataset_by_type(reference_dataset) 
 
             # Apply stvea_correction value
             self.imputed_reference = imputed_reference.copy(deep=True).applymap(
