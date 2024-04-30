@@ -838,9 +838,9 @@ def _z_avg_umi_sum(bg_z_score_df: pd.DataFrame,
     z_umi_df = pd.DataFrame(columns=['z_score_avg', 'total_umi'])
     z_umi_df['z_score_avg'] = bg_z_score_df.mean(axis=1)
     z_umi_df['total_umi'] = rna_counts_df.loc[z_umi_df.index].sum(axis=1)
-    z_umi_clean = z_umi_df.dropna()
+    # z_umi_clean = z_umi_df.dropna() # don't do it here! do it when we actually call lin_reg
 
-    return z_umi_clean
+    return z_umi_df
 
 def _z_avg_umi_sum_by_type(bg_z_score_df: pd.DataFrame,
                            rna_counts_df: pd.DataFrame,
