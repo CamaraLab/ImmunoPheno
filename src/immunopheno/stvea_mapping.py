@@ -667,6 +667,12 @@ class Mapping:
         bv = weights.dot(integration_matrix)
         bv.index = query_mat.index
         integrated = query_mat - bv
+
+        if integrated.isna().any().any():
+            na_rows_count = integrated.isna().any(axis=1).sum()
+            print(f"NaNs found after map_codex_to_cite. Dropping {na_rows_count} rows...")
+            integrated = integrated.dropna()
+
         stvea.codex_protein_corrected = integrated
         end = time.time()
         print(f"transform_data_matrix Time: {round(end - start, 3)} sec")
@@ -860,6 +866,10 @@ class Mapping:
     
             # Concatenate the DataFrames along the row axis
             combined_df = pd.concat(results, axis=0)
+            if combined_df.isna().any().any():
+                na_rows_count = combined_df.isna().any(axis=1).sum()
+                print(f"NaNs found after map_codex_to_cite. Dropping {na_rows_count} rows...")
+                combined_df = combined_df.dropna()
     
             self.stvea.codex_protein_corrected = combined_df
 
