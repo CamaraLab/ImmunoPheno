@@ -339,7 +339,113 @@ def remove_all_zeros_or_na(protein_df):
     # Display the modified DataFrame
     return filtered_df
 
-def impute_dataset_by_type(downsampled_df):
+def filter_imputed(imputed_df_with_na, rho):
+    # First check if dataframe has any NAs to start with
+    has_na = imputed_df_with_na.isna().any().any()
+    if not has_na:
+        return imputed_df_with_na
+
+    # Extract all columns other than "idCL"
+    imputed_ab = imputed_df_with_na.loc[:, imputed_df_with_na.columns != "idCL"]
+
+    # Create a "mask" table where 0s = values not NA in the imputed table, 1s = values that were NAs in the imputed table
+    imputed_ab_mask = imputed_ab.isna()
+    imputed_bool = imputed_ab_mask.astype(int)
+
+    ## Creating weights for ROWS
+    # For each row, count the number of 1s and sum them
+    row_sums = imputed_bool.sum(axis=1)
+    
+    # Create a new DataFrame to store row index and its sum
+    row_sums_df = pd.DataFrame({'Row': imputed_bool.index, 'Sum': row_sums})
+
+    # Apply weights based on the number of rows
+    row_sums_df['Weighted_Sum'] = row_sums_df['Sum'] * len(imputed_bool.index) * rho
+
+    ## Creating weights for COLUMNS
+    # For each column, count the number of 1s and sum them
+    col_sums = imputed_bool.sum(axis=0)
+    
+    # Create a new DataFrame to store column index and its sum
+    col_sums_df = pd.DataFrame({'Column': imputed_bool.columns, 'Sum': col_sums})
+    
+    # Apply weights based on the number of columns
+    col_sums_df['Weighted_Sum'] = col_sums_df['Sum'] * len(imputed_bool.columns) * (1 - rho)
+
+    ## Finding max weighted sum & frequency for ROWS
+    max_row_sum = row_sums_df['Weighted_Sum'].max()
+    
+    # Find rows with the max sum
+    max_row_sum_rows = row_sums_df[row_sums_df['Weighted_Sum'] == max_row_sum]
+    
+    # Check if there are multiple rows with the max sum
+    multiple_max_row_sums = len(max_row_sum_rows) > 1
+    
+    ## Finding max weighted sum & frequency for COLUMNS
+    # Find the max sum in columns
+    max_col_sum = col_sums_df['Weighted_Sum'].max()
+    
+    # Find columns with the max sum
+    max_col_sum_cols = col_sums_df[col_sums_df['Weighted_Sum'] == max_col_sum]
+    
+    # Check if there are multiple columns with the max sum
+    multiple_max_col_sums = len(max_col_sum_cols) > 1
+
+    # Deciding which row or column to filter out
+    # First priority: higher max weighted sum
+    if max_row_sum > max_col_sum:
+        # In this case, we want to filter out all the rows with this max sum
+        filtered_imputed = imputed_df_with_na.loc[~imputed_df_with_na.index.isin(max_row_sum_rows.index)]
+        
+    elif max_col_sum > max_row_sum:
+        # In this case, we want to filter out all columns with this max sum
+        filtered_imputed = imputed_df_with_na.drop(columns=list(max_col_sum_cols.index))
+        
+    elif max_row_sum == max_row_sum:
+        # Tiebreaker condition based on frequency of the max weight
+        if len(max_row_sum_rows) > len(max_col_sum_cols):
+            # If there were more frequent max sums in rows, then drop those
+            filtered_imputed = imputed_df_with_na.loc[~imputed_df_with_na.index.isin(max_row_sum_rows.index)]
+        elif len(max_col_sum_cols) > len(max_row_sum_rows):
+            # If there were more frequent max sums in cols, then drop those
+            filtered_imputed = imputed_df_with_na.drop(columns=list(max_col_sum_cols.index))
+
+        elif len(max_row_sum_rows) == len(max_col_sum_cols):
+            # If there is the same max, and the same frequency in either row/columns, randomly choose
+            # Generate a random number between 0 and 1
+            random_number = random.randint(0, 1)
+
+            if random_number == 0: # Drop rows
+                filtered_imputed = imputed_df_with_na.loc[~imputed_df_with_na.index.isin(max_row_sum_rows.index)]
+            elif random_number == 1: # Drop columns
+                filtered_imputed = imputed_df_with_na.drop(columns=list(max_col_sum_cols.index))
+            
+    return filtered_imputed
+
+def keep_calling_filter_imputed(original_imputed_df, rho):
+    # Empty dataframe to hold results & constantly update
+    modified_imputed_df = pd.DataFrame()
+    
+    # Initialize a flag to track changes
+    still_has_NA = True
+    
+    # Keep looping until no NAs remain in the dataframe
+    while still_has_NA:
+        # Call filter_imputed and get the modified imputed table
+        modified_imputed_df = filter_imputed(original_imputed_df, rho=rho)
+        
+        # Check if the current modified_imputed_df has any NAs remaining
+        if not (modified_imputed_df.isna().any().any()):
+            # If they are the same, set the flag to False to exit the loop
+            still_has_NA = False
+        else:
+            # If there are still NAs, update the imputed_df with the new modified_imputed_df for next call
+            original_imputed_df = modified_imputed_df
+    
+    # Return the final modified_idCLs
+    return modified_imputed_df
+
+def impute_dataset_by_type(downsampled_df, rho):
     # Find all unique idCLs in the table
     unique_idCLs = list(set(downsampled_df['idCL']))
 
@@ -352,7 +458,6 @@ def impute_dataset_by_type(downsampled_df):
         # Get all antibody values from this table (exclude last two columns). This is what will be imputed
         remaining_ab = [ab for ab in subtable.columns if (ab != 'idCL' and ab != 'idExperiment')]
         subtable_ab_to_impute = subtable[remaining_ab]
-
         # Handle cases where a column (antibody) is all NaN
         subtable_ab_drop = subtable_ab_to_impute.dropna(axis="columns", how="all")
 
@@ -374,15 +479,32 @@ def impute_dataset_by_type(downsampled_df):
     # Combine all imputed dataframes back to each other by row
     combined_imputed_df = pd.concat(imputed_dataframes, axis=0)
 
-    # For antibodies that still have NAs after imputation, drop them
-    combined_imputed_dropped_df = combined_imputed_df.dropna(axis="columns", how="any")
-
+    # For antibodies that still have NAs after imputation, repeatedly filter them out based on row/column heuristic
+    # combined_imputed_dropped_df = combined_imputed_df.dropna(axis="columns", how="any")
+    combined_imputed_dropped_df = keep_calling_filter_imputed(combined_imputed_df, rho=rho)
+    
     # Retrieve all the idCLs again for all the cells
     combined_imputed_dropped_idCLs = downsampled_df.loc[combined_imputed_dropped_df.index]["idCL"]
+    
     combined_imputed_df_with_idCL = pd.concat([combined_imputed_dropped_df, combined_imputed_dropped_idCLs], axis=1)
+
+    # Compare final output with the original output. See what remains, and see whether they were orignally NAs
+    final_columns = combined_imputed_df_with_idCL.columns
+    final_index = combined_imputed_df_with_idCL.index
+    original_remains = downsampled_df.loc[final_index, final_columns]
+
+    # Find statistics on the number of antibodies, cells, cell types that were imputed
+    num_columns_with_na = original_remains.isna().any().sum()
+    print("Number of antibodies imputed:", num_columns_with_na)
+
+    num_rows_with_na = original_remains.isna().any(axis=1).sum()
+    print("Number of cells imputed:", num_rows_with_na)
+
+    # Find which rows (cells) were NAs. From those cells, find number of unique cell types
+    na_rows = original_remains[original_remains.isna().any(axis=1)]
+    print("Number of cell types imputed:", len(set(na_rows["idCL"])))
     
     return combined_imputed_df_with_idCL
-
 
 def convert_idCL_readable(idCL:str) -> str:
     """
@@ -756,7 +878,8 @@ class ImmunoPhenoDB_Connect:
                   IPD,
                   idBTO: list = None, 
                   idExperiment: list = None, 
-                  parse_option: int = 1, 
+                  parse_option: int = 1,
+                  rho: float = 0.5,
                   pairwise_threshold: float = 1.0, 
                   na_threshold: float = 1.0, 
                   population_size: int = 50,
@@ -775,7 +898,7 @@ class ImmunoPhenoDB_Connect:
 
         # Check if reference query parameters have changed OR if the reference table is empty
         if (IPD, IPD._stvea_correction_value, idBTO, idExperiment, 
-            parse_option, pairwise_threshold, 
+            parse_option, rho, pairwise_threshold, 
             na_threshold, population_size) != self._last_stvea_params or self.imputed_reference is None:
 
             antibody_pairs = [[key, value] for key, value in IPD._ab_ids_dict.items()]
@@ -797,10 +920,20 @@ class ImmunoPhenoDB_Connect:
             elif 'application/json' in stvea_response.headers.get('content-type'):
                 res_JSON = stvea_response.json()
                 reference_dataset = pd.DataFrame.from_dict(res_JSON)
-        
+
+            # Output statistics on the number of antibodies matched
+            columns_to_exclude = ["idCL", "idExperiment"]
+            num_antibodies_matched = (~reference_dataset.columns.isin(columns_to_exclude)).sum()
+            if parse_option == 1:
+                print(f"Number of antibodies matched from database using clone ID: {num_antibodies_matched}")
+            elif parse_option == 2:
+                print(f"Number of antibodies matched from database using antibody target: {num_antibodies_matched}")
+            elif parse_option == 3:
+                print(f"Number of antibodies matched from database using antibody ID: {num_antibodies_matched}")
+
             # Impute any missing values in reference dataset
             print("Imputing missing values...")
-            imputed_reference = impute_dataset_by_type(reference_dataset) 
+            imputed_reference = impute_dataset_by_type(reference_dataset, rho=rho) 
 
             # Apply stvea_correction value
             self.imputed_reference = imputed_reference.copy(deep=True).applymap(
@@ -808,7 +941,7 @@ class ImmunoPhenoDB_Connect:
 
             # Store these parameters to check for subsequent function calls
             self._last_stvea_params = (IPD, IPD._stvea_correction_value, idBTO, idExperiment, 
-                                       parse_option, pairwise_threshold, 
+                                       parse_option, rho, pairwise_threshold, 
                                        na_threshold, population_size)
 
         # Separate out the antibody counts from the cell IDs 
