@@ -914,7 +914,8 @@ class ImmunoPhenoDB_Connect:
             }
 
             print("Retrieving reference dataset...")
-            stvea_response = requests.post(f"{self.url}/api/stveareference", json=stvea_body)
+            timeout = (600, 600) # connection, read timeout
+            stvea_response = requests.post(f"{self.url}/api/stveareference", json=stvea_body, timeout=timeout)
             if 'text/html' in stvea_response.headers.get('content-type'):
                 return stvea_response.text
             elif 'application/json' in stvea_response.headers.get('content-type'):
