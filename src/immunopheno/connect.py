@@ -1404,7 +1404,7 @@ class ImmunoPhenoDB_Connect:
         
             # Create graph
             print("Generating cell graph...")
-            G = fast_cell_label_graph(adj_mat, norm_labels)
+            G = fast_cell_label_graph(adj_mat)
         
             # Set cell type for each node in graph
             nx.set_node_attributes(G, ct_lookup, "celltype")
