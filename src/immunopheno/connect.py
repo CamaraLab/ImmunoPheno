@@ -20,6 +20,9 @@ from netgraph import Graph
 
 from sklearn.impute import KNNImputer
 from .stvea_controller import Controller
+import math
+import scipy
+import copy
 
 def _update_cl_owl():
     warnings.filterwarnings("ignore")
@@ -323,6 +326,7 @@ def plot_celltypes_graph(ab_id: str,
 
     return fig
 
+# Functions used for run_stvea
 def remove_all_zeros_or_na(protein_df):
     # Check if any row in the DataFrame has all NAs or all zeros
     rows_to_exclude = protein_df.apply(lambda row: all(row.isna() | (row == 0)), axis=1)
@@ -556,6 +560,358 @@ def ebi_idCL_map(labels_df: pd.DataFrame) -> dict:
     
     return idCL_map
 
+# Functions used for filter_labels
+def downsample(entire_reference_table: pd.DataFrame,
+               downsample_size: int = 10000,
+               size: int = 50) -> pd.DataFrame:
+    """
+    Downsamples the large reference table to 10,000 rows (cells). 
+    Performs downsampling in a controlled randomized order, where
+    proportions of each cell type in the original table are 
+    kept in the downsampled table. 
+
+    Parameters:
+        entire_reference_table (pd.DataFrame): original large table
+            containing all cells for the given antibodies
+        size (int): the minimum number of cells needed to define 
+            a cell type population
+    
+    Returns:
+        entire_reference_table (pd.DataFrame): downsampled 
+            reference table
+    """
+
+    total_num_cells = len(entire_reference_table.index)
+    
+    # Downsample if number of rows exceeds 10,000
+    if total_num_cells <= downsample_size:
+        return entire_reference_table
+    else:
+        cells_to_keep = []
+        combined_dfs = []
+        
+        # Find all unique idCLs in the table
+        unique_idCLs = list(set(entire_reference_table['idCL']))
+
+        # For each idCL, calculate the number of cells present
+        for idCL in unique_idCLs:
+            idCL_cells = entire_reference_table.loc[entire_reference_table['idCL'] == idCL]
+
+            # Find number of cells for this cell type
+            list_of_cells = list(idCL_cells.index)
+            num_idCL_cells = len(list_of_cells)
+
+            # Calculate an adjusted sample_amount for each idCL population to choose from
+            sample_amount = ((num_idCL_cells)/(total_num_cells)) * downsample_size
+
+            # Round up the sample amount
+            sample_amount_rounded_up = math.ceil(sample_amount)
+            
+            if sample_amount_rounded_up > size:
+                # Randomly sample this number of cells from this idCL population
+                sampled_population_index = random.sample(list_of_cells, sample_amount_rounded_up)
+
+                # Add these cells to cells_to_keep
+                cells_to_keep.extend(sampled_population_index)
+
+                # Create a df for just these cells in this cell type
+                temp_df = idCL_cells.loc[sampled_population_index]
+
+                # Add this to combined_dfs
+                combined_dfs.append(temp_df)
+                
+            else:
+                # If the sample amount was below our threshold, take 50 of the cells remaining
+                if num_idCL_cells > size:
+                    # Take 50 of these cells
+                    smaller_sampled_population_index = random.sample(list_of_cells, size)
+
+                    # Add these cells to cells_to_keep
+                    cells_to_keep.extend(smaller_sampled_population_index)
+
+                    # Create a df for just these cells in this cell type
+                    temp_df = idCL_cells.loc[smaller_sampled_population_index]
+                    
+                    # Add this to combined_dfs
+                    combined_dfs.append(temp_df)
+                    
+                # If there is not even 50 cells in the population, take whatever remains
+                else:
+                    remaining_sample_population_index = list_of_cells
+                    
+                    # Add these cells to cells_to_keep
+                    cells_to_keep.extend(remaining_sample_population_index)
+
+                    # Create a df for just these cells in this cell type
+                    temp_df = idCL_cells.loc[remaining_sample_population_index]
+                    
+                    # Add this to combined_dfs
+                    combined_dfs.append(temp_df)
+
+        if len(cells_to_keep) > downsample_size:
+            reduced_cells_to_keep = random.sample(cells_to_keep, downsample_size)
+            return entire_reference_table.loc[pd.Index(reduced_cells_to_keep)]
+        else:
+            return entire_reference_table.loc[pd.Index(cells_to_keep)]
+
+def pearson_correlation_adjaceny_matrix(pairwise_pearson_correlation_distances):
+    # Find the median correlation distance in the entire distance matrix
+    median = pairwise_pearson_correlation_distances.stack().median()
+    
+    # Create a boolean mask for values under a threshold
+    # We will only consider pairs that fall under this threshold
+    filtered_bool_mask = pd.DataFrame(pairwise_pearson_correlation_distances) < median
+
+    # Create adjacency matrix where 0 = false, 1 = true
+    adjacency_matrix = filtered_bool_mask.astype(int)
+    return adjacency_matrix
+
+def fast_cell_label_graph(adj_mat):
+    # Convert adjacency matrix to sparse and create graph
+    G = nx.from_scipy_sparse_array(scipy.sparse.csr_matrix(adj_mat))
+
+    node_names = list(adj_mat.index)
+    node_name_map = {i: node_names[i] for i in range(len(node_names))}
+
+    # Rename nodes in graph
+    G = nx.relabel_nodes(G, node_name_map)
+
+    return G
+
+def run_fisher_exact_test(G, celltype_of_interest):
+    # Initialize counts for each quadrant of the contingency table
+    quadrant1_count = 0  # Both nodes do not have "celltype"
+    quadrant2_count = 0  # Both nodes have "celltype"
+    quadrant3_count = 0  # One node has "celltype" and the other does not
+
+    # Iterate over the edges in the graph
+    for u, v in G.edges:
+        # Check the attributes of the nodes at each end of the edge
+        u_cell_type = G.nodes[u]["celltype"]
+        v_cell_type = G.nodes[v]["celltype"]
+        
+        # Case 1: Both nodes do not have "celltype1"
+        if u_cell_type != celltype_of_interest and v_cell_type != celltype_of_interest:
+            quadrant1_count += 1
+            
+        # Case 2: Both nodes have "celltype1"
+        elif u_cell_type == celltype_of_interest and v_cell_type == celltype_of_interest:
+            quadrant2_count += 1
+            
+        # Case 3: One node has "celltype1" and the other does not
+        else:
+            quadrant3_count += 1
+
+    contingency_table = [
+        [quadrant1_count, quadrant3_count],
+        [quadrant3_count, quadrant2_count]
+    ]
+
+    p_value = scipy.stats.fisher_exact(contingency_table)
+    return p_value[1] 
+
+def ab_id_dict_from_df(cell_labels_df, idCL_column="labels", celltype_column="celltype"):
+    unique_pairs_df = cell_labels_df.drop_duplicates()
+    result_dict = dict(zip(unique_pairs_df[idCL_column], unique_pairs_df[celltype_column]))
+    return result_dict
+
+def compare_idCL(G, cl1, cl2):
+    # Make sure graph is undirected
+    G_undirected = G.to_undirected()
+    
+    # Find distance between the two idCL nodes
+    distance = nx.shortest_path_length(G_undirected, source=cl1, target=cl2)
+    return distance
+
+def part2_filter(owl_graph, downsample_graph, idCLs, cell_labels_df, p_threshold=0.05, epsilon=4) -> list:
+    """
+    This function needs to take in 2 different graphs
+    1. OWL graph: UNDIRECTED Original graph containing all cell type relationships. Used to calculate distances between nodes
+    2. Downsample Graph: Graph we generate from the normalized cell labels. Used to generate subgraph and run the fisher exact test
+
+    This takes in and returns a modified list of idCLs to keep performing pairwise comparisons
+    1. idCLs: can contain names that's either a single idCL/celltype OR a combination of CL1_CL2
+
+    This takes in a dataframe containing the cell labels/celltype names, which will be modified as well
+    1. cell_labels_df
+
+    P_threshold is for the fisher exact test
+    epsilon is for satisfying one of 3 conditions after receiving a insignificant P value
+    """   
+    # For finding distances between two cell type nodes, use an undirected OWL graph which only contains CL nodes
+    # Create a mapping dictionary to quickly find the celltype name for an ID
+    ab_lookup_dict = ab_id_dict_from_df(cell_labels_df)
+
+    # Return the modified list of idCLs at the end
+    modified_idCLs = idCLs.copy()
+
+    # Begin going through every possible pair of cell types
+    for i in range(len(idCLs)):
+        for j in range(i+1, len(idCLs)):
+            distance_between_nodes = compare_idCL(owl_graph, idCLs[i], idCLs[j])
+
+            # If the distance between two nodes (cell types) is <=2 , create a NN graph
+            if distance_between_nodes <= 2:
+   
+                # Use the DOWNSAMPLED graph we made here, we need the directed edges
+                selected_nodes_cl1 = [n for n,v in downsample_graph.nodes(data=True) if v['celltype'] == idCLs[i]]
+                selected_nodes_cl2 = [n for n,v in downsample_graph.nodes(data=True) if v['celltype'] == idCLs[j]]
+                selected_nodes_total = selected_nodes_cl1 + selected_nodes_cl2
+
+                # Get the sub-graph of the downsampled graph to only contain those 2 cell types
+                downsample_subgraph = nx.subgraph(downsample_graph, selected_nodes_total)
+
+                # Now with this downsampled subgraph, we perform a fisher's test with a contingency table
+                # The first idCL or "idCLs[i]" will be the "target" one
+                p_value = run_fisher_exact_test(downsample_subgraph, idCLs[i])
+
+                # If p value is significant, move on to the next comparison
+                if p_value < p_threshold:
+                    continue
+                # If p value is NOT significant, then calculate the proportion of each node in the server subgraph
+                else:
+                    proportion_cl1 = len(selected_nodes_cl1)/len(selected_nodes_total)
+                    proportion_cl2 = len(selected_nodes_cl2)/len(selected_nodes_total)
+
+                    # If the p value was insignificant, then try 3 conditions out. After each condition, update the dataframe and return
+                    # The new list of idCLs
+                    # For ANY condition that is triggered, RETURN the function immediately containing the modified list of idCLs
+
+                    # Condition 1: (1/epsilon) <= Prop.CL1 / Prop.CL2 <= epsilon
+                    if ((1/epsilon) <= (proportion_cl1/proportion_cl2) <= epsilon):
+                        # If we cannot distinguish between CL1 and CL2,
+                        # Combine the two CL1 & CL2 to be CL1_CL2, and likewise for their celltype names
+                        combined_idCL_name = idCLs[i] + "_" + idCLs[j]
+                        combined_celltype_name = ab_lookup_dict[idCLs[i]] + "_" + ab_lookup_dict[idCLs[j]]
+
+                        # Update the celltype names for those cells FIRST, since we use the idCLs to refer them
+                        # Update the cell labels (idCLs) cells originally listed with CL1 and CL2
+                        cell_labels_df.loc[cell_labels_df['labels'] == idCLs[i], 'celltype'] = combined_celltype_name
+                        cell_labels_df.loc[cell_labels_df['labels'] == idCLs[j], 'celltype'] = combined_celltype_name
+                        
+                        print(f"Replacing all cells of {idCLs[i]} with merged name: {combined_idCL_name}")
+                        print(f"Replacing all cells of {idCLs[j]} with merged name: {combined_idCL_name}")
+                        cell_labels_df.loc[cell_labels_df['labels'] == idCLs[i], 'labels'] = combined_idCL_name
+                        cell_labels_df.loc[cell_labels_df['labels'] == idCLs[j], 'labels'] = combined_idCL_name
+
+                        # We must also update all nodes in the downsampled graph that belong to Cl1 or Cl2 with the new
+                        # combined celltype name
+                        for node in downsample_graph.nodes():
+                            # Check if the node has the attribute 'celltype'
+                            if 'celltype' in downsample_graph.nodes[node]:
+                                # Check if the celltype is 'CL1' or 'CL2'
+                                if downsample_graph.nodes[node]['celltype'] == idCLs[i] or downsample_graph.nodes[node]['celltype'] == idCLs[j]:
+                                    # Replace the celltype with 'CL1_CL2'
+                                    downsample_graph.nodes[node]['celltype'] = combined_idCL_name
+                        
+                        # Update the OWL graph to contain the merged name for CL1 and CL2
+                        mapping_merged_names = {idCLs[i]: combined_idCL_name,
+                                                idCLs[j]: combined_idCL_name}
+                        nx.relabel_nodes(owl_graph, mapping_merged_names, copy=False) # do it in place
+                        
+                        # Remove the CL1 and CL2 from the list of idCLs          
+                        modified_idCLs.remove(idCLs[i])
+                        modified_idCLs.remove(idCLs[j])
+
+                        # Add the new combined idCL
+                        modified_idCLs.append(combined_idCL_name)
+                        return modified_idCLs, owl_graph
+                        
+                    elif (proportion_cl1 < proportion_cl2):
+                        # Replace all cells from CL1 with labels of CL2
+
+                        # Update the celltype names for CL1 with the ones for CL2
+                        idCL1_name = ab_lookup_dict[idCLs[i]]
+                        idCL2_name = ab_lookup_dict[idCLs[j]]
+                        cell_labels_df.loc[cell_labels_df['labels'] == idCLs[i], 'celltype'] = idCL2_name
+
+                        # Update the cell labels (idCLs) for CL1 with the ones for CL2
+                        print(f"Replacing all cells of {idCLs[i]} with {idCLs[j]}")
+                        cell_labels_df.loc[cell_labels_df['labels'] == idCLs[i], 'labels'] = idCLs[j]
+
+                        # Also update all nodes in downsampled graph that belong to CL1 to now become CL2
+                        for node in downsample_graph.nodes():
+                            # Check if the node has the attribute 'celltype'
+                            if 'celltype' in downsample_graph.nodes[node]:
+                                # Check if the celltype is CL1
+                                if downsample_graph.nodes[node]['celltype'] == idCLs[i]:
+                                    # Replace the celltype with CL2
+                                    downsample_graph.nodes[node]['celltype'] = idCLs[j]
+
+                        # Remove CL1 from the list of idCLs
+                        modified_idCLs.remove(idCLs[i])
+                        return modified_idCLs, owl_graph
+
+                    elif (proportion_cl2 < proportion_cl1):
+                        # Replace all cells from CL2 with labels of CL1
+
+                        # Update the celltype names for CL2 with the ones for CL1
+                        idCL1_name = ab_lookup_dict[idCLs[i]]
+                        idCL2_name = ab_lookup_dict[idCLs[j]]
+                        cell_labels_df.loc[cell_labels_df['labels'] == idCLs[j], 'celltype'] = idCL1_name
+
+                        # Update the cell labels (idCLs) for CL2 with the ones for CL1
+                        print(f"Replacing all cells of {idCLs[j]} with {idCLs[i]}")
+                        cell_labels_df.loc[cell_labels_df['labels'] == idCLs[j], 'labels'] = idCLs[i]
+
+                        # Also update all nodes in downsampled graph that belong to CL2 to now become CL1
+                        for node in downsample_graph.nodes():
+                            # Check if the node has the attribute 'celltype'
+                            if 'celltype' in downsample_graph.nodes[node]:
+                                # Check if the celltype is CL1
+                                if downsample_graph.nodes[node]['celltype'] == idCLs[j]:
+                                    # Replace the celltype with CL2
+                                    downsample_graph.nodes[node]['celltype'] = idCLs[i]
+
+                        # Remove CL2 from the list of idCLs
+                        modified_idCLs.remove(idCLs[j])
+                        return modified_idCLs, owl_graph
+                    
+            # If the distance between two nodes is greater than 2, ignore and move onto next comparison
+            else:
+                continue
+
+    return modified_idCLs, owl_graph
+
+def keep_calling_part2(owl_graph, downsample_graph, idCLs, cell_labels_df, p_threshold, epsilon):
+    """
+    This calls our part2_filter function over and over
+
+    Parameters:
+        owl_graph from the class
+        downsample_graph from the class
+        idCLs from the object
+        cell labels from the object
+        
+    """
+    # Initialize modified_idCLs with an empty list
+    modified_idCLs = []
+    
+    # Initialize a flag to track changes
+    changed = True
+    
+    # Keep looping until no changes are made
+    while changed:
+        # Call part2_filter function and get the modified_idCLs list
+        modified_idCLs, modified_owl = part2_filter(owl_graph, 
+                                                    downsample_graph, 
+                                                    idCLs, cell_labels_df, 
+                                                    p_threshold=p_threshold, 
+                                                    epsilon=epsilon)
+        
+        # Check if the current modified_idCLs is the same as the previous one
+        if modified_idCLs == idCLs:
+            # If they are the same, set the flag to False to exit the loop
+            changed = False
+        else:
+            # If they are different, update idCLs with the new modified_idCLs
+            idCLs = modified_idCLs
+            # Also use the updated OWL graph
+            owl_graph = modified_owl
+    
+    # Return the final modified_idCLs
+    return modified_idCLs
+
 class ImmunoPhenoDB_Connect:
     def __init__(self, url: str):
         self.url = url
@@ -566,6 +922,7 @@ class ImmunoPhenoDB_Connect:
         self._last_stvea_params = None
         self.imputed_reference = None
         self.transfer_matrix = None
+        self._downsample_pairwise_graph = None
 
         if self.url is None:
             raise Exception("Error. Server URL must be provided")
@@ -1008,3 +1365,156 @@ class ImmunoPhenoDB_Connect:
         IPD._normalized_counts_df = IPD._normalized_counts_df.loc[IPD._cell_labels_filt_df.index]
         print("Annotation transfer complete.")
         return IPD
+
+    def _part1_localization(self, IPD, p_threshold=0.05, remove=False):
+        """
+        Act like this is a class method with "self" for the time being
+        
+        Remove: the option to either remove cells completely from the object after filtering
+                OR set it to "Not Assigned" instead in the cell annotations
+        """
+        # We will be working with the normalized_counts and norm_cell_labels in the IPD object
+        # First, we will need to ignore all initial cells labeled as "Not Assigned"
+        filtered_index = IPD.norm_cell_labels[IPD.norm_cell_labels['labels'] != 'Not Assigned'].index
+        norm_counts = pd.DataFrame(IPD.normalized_counts.loc[filtered_index])
+        norm_labels = pd.DataFrame(IPD.norm_cell_labels.loc[filtered_index])
+    
+        # Temporarily rename the "labels" column to "idCL"
+        norm_counts_labels = norm_labels.rename(columns={"labels":"idCL"})
+        
+        # Combine the normalized protein with the labels field containing "idCL"
+        norm_combine = pd.concat([norm_counts, norm_counts_labels.loc[norm_labels.index]["idCL"]], axis = 1)
+    
+        ## GRAPH CREATION ## 
+        # Create dictionary of cell barcodes to their cell types
+        if self._downsample_pairwise_graph is None:
+            ct_lookup = norm_counts_labels["idCL"].to_dict()
+        
+            # Downsample to 5000 cells and get pairwise distance matrix
+            print("Downsampling dataset to 5000 cells...")
+            ds_norm = downsample(norm_combine, downsample_size=5000)
+        
+            # Calculate the pairwise correlation distances between all rows (cells)
+            print("Calculating pairwise distances between cells...")
+            df_without_idCL = ds_norm.drop(columns=["idCL"])
+            pairwise_correlation = (1 - df_without_idCL.T.corr())
+        
+            # Create adjacency matrix
+            adj_mat = pearson_correlation_adjaceny_matrix(pairwise_correlation)
+        
+            # Create graph
+            print("Generating cell graph...")
+            G = fast_cell_label_graph(adj_mat, norm_labels)
+        
+            # Set cell type for each node in graph
+            nx.set_node_attributes(G, ct_lookup, "celltype")
+        
+            ###################################### Store this graph object in the class
+            self._downsample_pairwise_graph = G
+        else:
+            G = self._downsample_pairwise_graph
+    
+        # Get all unique cell types to filter over
+        all_celltypes = set(norm_counts_labels["idCL"])
+    
+        # Store labels to remove
+        labels_to_remove = []
+
+        print("Conducting fisher exact test for each cell type...")
+        # Perform fisher for every cell type
+        for celltype in all_celltypes:
+            p_val = run_fisher_exact_test(G, celltype)
+            if p_val > p_threshold:
+                labels_to_remove.append(celltype)
+    
+        ## REMOVAL/RENAME step
+        print(f"Number of cell types to remove/rename:", len(labels_to_remove))
+        print("Cell types to remove/rename:", labels_to_remove)
+        
+        # Find which cells contain these labels
+        affected_cells = norm_counts_labels[norm_counts_labels['idCL'].isin(labels_to_remove)]
+        affected_cells_index = list(affected_cells.index)
+    
+        # Make a copy of the object to return
+        temp_copy = copy.deepcopy(IPD)
+    
+        # This function needs to reset the UMAPs present. So remove _raw_umap and _norm_umap and set to None
+        temp_copy._raw_umap = None
+        temp_copy._norm_umap = None
+        temp_copy._umap_kwargs = None
+        
+        # If removing cells, remove from all parts of the object
+        if remove:
+            print(f"Removing {len(affected_cells_index)} cells from object...")
+            # Filter out attributes that start with an underscore and are not properties
+            attrs_to_iterate = [attr_name for attr_name in dir(temp_copy) if attr_name.startswith('_') and not isinstance(getattr(temp_copy.__class__, attr_name, None), property)]
+            
+            for attr_name in attrs_to_iterate:
+                attr_value = getattr(temp_copy, attr_name)
+                if isinstance(attr_value, pd.DataFrame):
+                    # If the attribute is a DataFrame, drop rows from it using the provided index
+                    setattr(temp_copy, attr_name, attr_value.drop(index=affected_cells_index, errors='ignore'))
+            
+            print(f"Removed {len(affected_cells_index)} cells from object.")    
+            return temp_copy
+        else:
+            print(f"Renaming {len(affected_cells_index)} cells with 'Not Assigned' label...")
+            temp_copy.norm_cell_labels.loc[affected_cells.index, ['labels', 'celltype']] = "Not Assigned"
+            print(f"Renamed {len(affected_cells_index)} cells.")
+            return temp_copy
+
+    def _part2_merging(self, IPD, p_threshold=0.05, epsilon=4):
+        # Create a deepcopy of the OWL graph. This one will be constantly updated
+        owl_graph_deepcopy = copy.deepcopy(self._OWL_graph)
+        # Create a deepcopy of the downsampled pairwise distance graph. It will be updated as well
+        downsample_graph_deepcopy = copy.deepcopy(self._downsample_pairwise_graph)
+    
+        # Remove all nodes in OWL graph that are not "CL:" cell ontology
+        nodes_to_remove = [node for node in owl_graph_deepcopy.nodes() if "CL:" not in node]
+        owl_graph_deepcopy.remove_nodes_from(nodes_to_remove)
+    
+        # Get all cell types from the IPD object, ignoring "Not Assigned"
+        idCLs = list(set(IPD.norm_cell_labels['labels']))
+        if "Not Assigned" in idCLs:
+            idCLs.remove("Not Assigned")
+        cell_labels_df = IPD.norm_cell_labels.copy(deep=True)
+    
+        # Call filter function until no more labels are filtered out
+        celltypes_remaining = keep_calling_part2(owl_graph_deepcopy.to_undirected(), 
+                                                 downsample_graph_deepcopy, 
+                                                 idCLs, 
+                                                 cell_labels_df, 
+                                                 p_threshold, 
+                                                 epsilon)
+        
+        number_merged = sum(1 for element in celltypes_remaining if "_" in element)
+        print(f"Number of cell types merged: {number_merged}")
+    
+        # Create a new object to return
+        temp_copy = copy.deepcopy(IPD)
+    
+        # This function needs to reset the UMAPs present. So remove _raw_umap and _norm_umap and set to None
+        temp_copy._raw_umap = None
+        temp_copy._norm_umap = None
+        temp_copy._umap_kwargs = None
+    
+        # Set the new cell_labels_df in the temp object to return
+        temp_copy._cell_labels_filt_df = cell_labels_df
+    
+        return temp_copy
+
+    def filter_labels(self, IPD, p_threshold=0.05, remove_labels=False, epsilon=4, merging=False):
+        # Localization is performed by default
+        if merging is False:
+            print("Performing localization...")
+            ipd_after_localization = self._part1_localization(IPD, p_threshold=p_threshold, remove=remove_labels)
+            print("Localization complete.")
+            return ipd_after_localization
+        elif merging is True:
+            print("Performing localization...")
+            ipd_after_localization = self._part1_localization(IPD, p_threshold=p_threshold, remove=remove_labels)
+            print("Localization complete.")
+            print("\nPerforming merging...")
+            ipd_after_localization_merging = self._part2_merging(ipd_after_localization, p_threshold=p_threshold, epsilon=epsilon)
+            print("Merging complete.")
+            return ipd_after_localization_merging
