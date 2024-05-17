@@ -107,19 +107,15 @@ def plot_UMAP(IPD,
         
         # Not normalized UMAP plot with cell labels
         elif IPD._cell_labels is not None and not normalized:
-            # NOTE: if the provided labels contains more cells than present in regular protein (IPD._cell_labels)
-            # Find shared index in the IPD.labels based on cells ONLY in IPD._cell_labels
-            common_indices = IPD._cell_labels.index.intersection(IPD.labels.index)
-
             # Check the number of columns
             num_columns = IPD._cell_labels.shape[1]
             # Check if there is at least one column and if the second column is not empty
             if num_columns > 1 and not IPD._cell_labels.iloc[:, 1].isnull().all():
                 # Use the values from the second column
-                raw_types = IPD._cell_labels.iloc[:, 1].loc[common_indices].tolist()
+                raw_types = IPD._cell_labels.iloc[:, 1].tolist()
             else:
                 # If there is no second column or it is empty, use the values from the first column
-                raw_types = IPD._cell_labels.iloc[:, 0].loc[common_indices].tolist()
+                raw_types = IPD._cell_labels.iloc[:, 0].tolist()
                 
             reg_plot = px.scatter(
                 raw_projections, x=0, y=1,
