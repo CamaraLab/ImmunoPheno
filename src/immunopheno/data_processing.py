@@ -1542,6 +1542,7 @@ class ImmunoPhenoData:
         # If dealing with single cell data with provided cell labels
         if self._cell_labels is not None:
             self._cell_labels = _load_labels(self._cell_labels) # assume user provides cells as rows, label as col
+            self._cell_labels_filt_df = self._cell_labels.copy(deep=True) # if loading in labels intiailly, also place them in the norm labels
             self._temp_labels = self._cell_labels.copy(deep=True)
         else:
             cell_labels = None
@@ -1602,18 +1603,43 @@ class ImmunoPhenoData:
     @rna.setter
     def rna(self, value):
         self._gene_matrix = value
-
+    
     @property
-    def norm_cell_labels(self):
+    def labels(self):
         return self._cell_labels_filt_df
+    
+    @labels.setter
+    def labels(self, value):
+        self._cell_labels_filt_df = value #  Change the norm_cell_labels
+        # If the cells in 'value' are found in the original table, update those rows too
+        common_indices = self._cell_labels.index.intersection(self._cell_labels_filt_df.index)
+        # Check for missing rows in new table that should be updated in original labels
+        missing_indices = self._cell_labels_filt_df.index.difference(self._cell_labels.index)
 
-    @property
-    def raw_cell_labels(self):
-        return self._cell_labels
+        if not missing_indices.empty:
+            print(f"Warning: The following rows were not found in the original protein dataset and will be ignored: {missing_indices.tolist()}")
 
-    @raw_cell_labels.setter
-    def raw_cell_labels(self, value):
-        self._cell_labels = value
+        # Check for indices in A that will be updated
+        if not common_indices.empty:
+            try:
+                # Update the rows in the raw_cell_labels to reflect the annotations in the norm_cell_labels
+                self._cell_labels.loc[common_indices, ['labels', 'celltype']] = self._cell_labels_filt_df.loc[common_indices, ['labels', 'celltype']]
+            except Exception as e:
+                print(f"An error occurred during the update: {e}")
+        else:
+            print("No common rows found between old and new labels. No updates will be made to the old labels.")
+
+    # @property
+    # def norm_cell_labels(self):
+    #     return self._cell_labels_filt_df
+
+    # @property
+    # def raw_cell_labels(self):
+    #     return self._cell_labels
+
+    # @raw_cell_labels.setter
+    # def raw_cell_labels(self, value):
+    #     self._cell_labels = value
 
     @property
     def label_certainties(self):
@@ -1635,25 +1661,25 @@ class ImmunoPhenoData:
 
     def convert_labels(self):
         # First, check that the raw cell types table exists
-        if self.raw_cell_labels is not None and isinstance(self.raw_cell_labels, pd.DataFrame):
+        if self._cell_labels is not None and isinstance(self._cell_labels, pd.DataFrame):
             # Check if the "labels" column exists
-            if "labels" in self.raw_cell_labels:
+            if "labels" in self._cell_labels:
                 # Create mapping dictionary using values in the "labels" field
-                labels_map = ebi_idCL_map(self.raw_cell_labels)
+                labels_map = ebi_idCL_map(self._cell_labels)
 
                 # Map all values from dictionary back onto the "celltype" field
-                temp_df = self.raw_cell_labels.copy(deep=True)
+                temp_df = self._cell_labels.copy(deep=True)
                 temp_df['celltype'] = temp_df['labels'].map(labels_map)
 
                 # Ensure all "labels" follow the format of "CL:XXXXXXX"
                 temp_df["labels"] = temp_df["labels"].str.replace(r'^CL_([0-9]+)$', r'CL:\1')
                 
                 # Set new table
-                self.raw_cell_labels = temp_df
+                self._cell_labels = temp_df
 
                 # Check if normalized cell types exist. If so, repeat above
-                if self.norm_cell_labels is not None and isinstance(self.norm_cell_labels, pd.DataFrame):
-                    norm_temp_df = self.norm_cell_labels.copy(deep=True)
+                if self.labels is not None and isinstance(self.labels, pd.DataFrame):
+                    norm_temp_df = self.labels.copy(deep=True)
                     norm_temp_df['celltype'] = norm_temp_df['labels'].map(labels_map)
 
                     # Ensure all "labels" follow the format of "CL:XXXXXXX"
@@ -1968,7 +1994,7 @@ class ImmunoPhenoData:
         if self._cell_labels is not None:
             cell_labels_filt = _filter_cell_labels(classified_cells_filt,
                                                         self._cell_labels)
-            self._cell_labels_filt_df = cell_labels_filt
+            self._cell_labels_filt_df = cell_labels_filt # this will replace the norm label field directly
 
         # Calculate z scores for all values
         z_scores = _z_scores_df(all_fits, protein_cleaned_filt)
