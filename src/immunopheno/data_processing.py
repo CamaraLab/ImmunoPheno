@@ -1619,8 +1619,11 @@ class ImmunoPhenoData:
         if not missing_indices.empty:
             print(f"Warning: The following rows were not found in the original protein dataset and will be ignored: {missing_indices.tolist()}")
 
-        # Check for indices in A that will be updated
+        # Check for indices in raw_cell_labels that will be updated
         if not common_indices.empty:
+            # Reset the UMAPs
+            self._raw_umap = None
+            self._norm_umap = None
             try:
                 # Update the rows in the raw_cell_labels to reflect the annotations in the norm_cell_labels
                 self._cell_labels.loc[common_indices, ['labels', 'celltype']] = self._cell_labels_filt_df.loc[common_indices, ['labels', 'celltype']]
