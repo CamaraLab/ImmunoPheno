@@ -64,7 +64,7 @@ def plot_UMAP(IPD,
             raw_projections = umap_plot.fit_transform(IPD.protein)
         
         # Normalized UMAP without cell labels
-        if IPD.norm_cell_labels is None and normalized:
+        if IPD.labels is None and normalized:
             norm_plot = px.scatter(
                 norm_projections, x=0, y=1,
             )
@@ -72,7 +72,7 @@ def plot_UMAP(IPD,
             return norm_plot
         
         # Un-normalized UMAP without cell labels
-        elif IPD.raw_cell_labels is None and not normalized:
+        elif IPD._cell_labels is None and not normalized:
             raw_plot = px.scatter(
                 raw_projections, x=0, y=1,
             )
@@ -80,16 +80,16 @@ def plot_UMAP(IPD,
             return raw_plot
 
         # Normalized UMAP plot with cell labels
-        if IPD.norm_cell_labels is not None and normalized:
+        if IPD.labels is not None and normalized:
             # Check the number of columns
-            num_columns = IPD.norm_cell_labels.shape[1]
+            num_columns = IPD.labels.shape[1]
             # Check if there is at least one column and if the second column is not empty
-            if num_columns > 1 and not IPD.norm_cell_labels.iloc[:, 1].isnull().all():
+            if num_columns > 1 and not IPD.labels.iloc[:, 1].isnull().all():
                 # Use the values from the second column
-                raw_types = IPD.norm_cell_labels.iloc[:, 1].tolist()
+                raw_types = IPD.labels.iloc[:, 1].tolist()
             else:
                 # If there is no second column or it is empty, use the values from the first column
-                raw_types = IPD.norm_cell_labels.iloc[:, 0].tolist()
+                raw_types = IPD.labels.iloc[:, 0].tolist()
 
             norm_plot = px.scatter(
                 norm_projections, x=0, y=1,
@@ -101,16 +101,16 @@ def plot_UMAP(IPD,
             return norm_plot
         
         # Not normalized UMAP plot with cell labels
-        elif IPD.raw_cell_labels is not None and not normalized:
+        elif IPD._cell_labels is not None and not normalized:
             # Check the number of columns
-            num_columns = IPD.raw_cell_labels.shape[1]
+            num_columns = IPD._cell_labels.shape[1]
             # Check if there is at least one column and if the second column is not empty
-            if num_columns > 1 and not IPD.raw_cell_labels.iloc[:, 1].isnull().all():
+            if num_columns > 1 and not IPD._cell_labels.iloc[:, 1].isnull().all():
                 # Use the values from the second column
-                raw_types = IPD.raw_cell_labels.iloc[:, 1].tolist()
+                raw_types = IPD._cell_labels.iloc[:, 1].tolist()
             else:
                 # If there is no second column or it is empty, use the values from the first column
-                raw_types = IPD.raw_cell_labels.iloc[:, 0].tolist()
+                raw_types = IPD._cell_labels.iloc[:, 0].tolist()
                 
             reg_plot = px.scatter(
                 raw_projections, x=0, y=1,
