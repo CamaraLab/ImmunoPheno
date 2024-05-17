@@ -81,20 +81,25 @@ def plot_UMAP(IPD,
 
         # Normalized UMAP plot with cell labels
         if IPD.labels is not None and normalized:
+            # NOTE: if the provided labels contains more cells than present in normalized_counts
+            # Find shared index in the IPD.labels based on cells ONLY in normalized_counts
+            common_indices = IPD.normalized_counts.index.intersection(IPD.labels.index)
+
             # Check the number of columns
             num_columns = IPD.labels.shape[1]
             # Check if there is at least one column and if the second column is not empty
             if num_columns > 1 and not IPD.labels.iloc[:, 1].isnull().all():
                 # Use the values from the second column
-                raw_types = IPD.labels.iloc[:, 1].tolist()
+                norm_types = IPD.labels.iloc[:, 1].loc[common_indices].tolist()
+
             else:
                 # If there is no second column or it is empty, use the values from the first column
-                raw_types = IPD.labels.iloc[:, 0].tolist()
+                norm_types = IPD.labels.iloc[:, 0].loc[common_indices].tolist()
 
             norm_plot = px.scatter(
                 norm_projections, x=0, y=1,
                 color_discrete_sequence=px.colors.qualitative.Dark24,
-                color=[str(cell_type) for cell_type in raw_types],
+                color=[str(cell_type) for cell_type in norm_types],
                 labels={'color':'cell type'}
             )
             IPD._norm_umap = norm_plot
@@ -102,15 +107,19 @@ def plot_UMAP(IPD,
         
         # Not normalized UMAP plot with cell labels
         elif IPD._cell_labels is not None and not normalized:
+            # NOTE: if the provided labels contains more cells than present in regular protein (IPD._cell_labels)
+            # Find shared index in the IPD.labels based on cells ONLY in IPD._cell_labels
+            common_indices = IPD._cell_labels.index.intersection(IPD.labels.index)
+
             # Check the number of columns
             num_columns = IPD._cell_labels.shape[1]
             # Check if there is at least one column and if the second column is not empty
             if num_columns > 1 and not IPD._cell_labels.iloc[:, 1].isnull().all():
                 # Use the values from the second column
-                raw_types = IPD._cell_labels.iloc[:, 1].tolist()
+                raw_types = IPD._cell_labels.iloc[:, 1].loc[common_indices].tolist()
             else:
                 # If there is no second column or it is empty, use the values from the first column
-                raw_types = IPD._cell_labels.iloc[:, 0].tolist()
+                raw_types = IPD._cell_labels.iloc[:, 0].loc[common_indices].tolist()
                 
             reg_plot = px.scatter(
                 raw_projections, x=0, y=1,
