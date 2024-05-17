@@ -502,6 +502,7 @@ def impute_dataset_by_type(downsampled_df, rho):
     print("Number of antibodies imputed:", num_columns_with_na)
 
     num_rows_with_na = original_remains.isna().any(axis=1).sum()
+    print("Total number of cells returned:", len(final_index))
     print("Number of cells imputed:", num_rows_with_na)
 
     # Find which rows (cells) were NAs. From those cells, find number of unique cell types
@@ -1354,7 +1355,7 @@ class ImmunoPhenoDB_Connect:
         # Add labels to raw cell labels as well. The filtered rows will be marked as "filtered"
         original_cells_index = IPD.protein.index
         merged_df = IPD._cell_labels_filt_df.reindex(original_cells_index)
-        merged_df = merged_df.fillna("filtered")
+        merged_df = merged_df.fillna("filtered_by_stvea")
 
         # Check if the raw and norm labels have changed. If so, reset the UMAP field in IPD
         if not (merged_df.equals(IPD._cell_labels)):
@@ -1373,11 +1374,11 @@ class ImmunoPhenoDB_Connect:
         Remove: the option to either remove cells completely from the object after filtering
                 OR set it to "Not Assigned" instead in the cell annotations
         """
-        # We will be working with the normalized_counts and norm_cell_labels in the IPD object
+        # We will be working with the normalized_counts and labels in the IPD object
         # First, we will need to ignore all initial cells labeled as "Not Assigned"
-        filtered_index = IPD.norm_cell_labels[IPD.norm_cell_labels['labels'] != 'Not Assigned'].index
+        filtered_index = IPD.labels[IPD.labels['labels'] != 'Not Assigned'].index
         norm_counts = pd.DataFrame(IPD.normalized_counts.loc[filtered_index])
-        norm_labels = pd.DataFrame(IPD.norm_cell_labels.loc[filtered_index])
+        norm_labels = pd.DataFrame(IPD.labels.loc[filtered_index])
     
         # Temporarily rename the "labels" column to "idCL"
         norm_counts_labels = norm_labels.rename(columns={"labels":"idCL"})
@@ -1459,7 +1460,7 @@ class ImmunoPhenoDB_Connect:
             return temp_copy
         else:
             print(f"Renaming {len(affected_cells_index)} cells with 'Not Assigned' label...")
-            temp_copy.norm_cell_labels.loc[affected_cells.index, ['labels', 'celltype']] = "Not Assigned"
+            temp_copy.labels.loc[affected_cells.index, ['labels', 'celltype']] = "Not Assigned"
             print(f"Renamed {len(affected_cells_index)} cells.")
             return temp_copy
 
@@ -1474,10 +1475,10 @@ class ImmunoPhenoDB_Connect:
         owl_graph_deepcopy.remove_nodes_from(nodes_to_remove)
     
         # Get all cell types from the IPD object, ignoring "Not Assigned"
-        idCLs = list(set(IPD.norm_cell_labels['labels']))
+        idCLs = list(set(IPD.labels['labels']))
         if "Not Assigned" in idCLs:
             idCLs.remove("Not Assigned")
-        cell_labels_df = IPD.norm_cell_labels.copy(deep=True)
+        cell_labels_df = IPD.labels.copy(deep=True)
     
         # Call filter function until no more labels are filtered out
         celltypes_remaining = keep_calling_part2(owl_graph_deepcopy.to_undirected(), 
