@@ -707,15 +707,17 @@ class Mapping:
                       k_find_weights, 
                       nn_option):
                           
-        common_protein = [protein for protein in self.stvea.codex_protein.columns if
-                          protein in self.stvea.cite_protein.columns]
+        # Before finding common proteins, drop any proteins that are all 0s
+        codex_dropped = remove_all_zeros_or_na(self.stvea.codex_protein)
+        cite_dropped = remove_all_zeros_or_na(self.stvea.cite_protein)
+
+        # find common proteins
+        common_protein = [protein for protein in codex_dropped if
+                            protein in cite_dropped]
         
         codex_subset = self.stvea.codex_protein.loc[:, common_protein]
         cite_subset = self.stvea.cite_protein.loc[:, common_protein]
     
-        codex_subset = remove_all_zeros_or_na(codex_subset)
-        cite_subset = remove_all_zeros_or_na(cite_subset)
-
         if self.stvea.cite_latent.shape != (0, 0):
             cite_latent = self.stvea.cite_latent
         else:
@@ -780,9 +782,13 @@ class Mapping:
         start = time.time()
 
         if num_chunks == 1:
+            # Before finding common proteins, drop any proteins that are all 0s
+            codex_dropped = remove_all_zeros_or_na(self.stvea.codex_protein)
+            cite_dropped = remove_all_zeros_or_na(self.stvea.cite_protein)
+
             # find common proteins
-            common_protein = [protein for protein in self.stvea.codex_protein.columns if
-                              protein in self.stvea.cite_protein.columns]
+            common_protein = [protein for protein in codex_dropped if
+                              protein in cite_dropped]
     
             if len(common_protein) < 2:
                 # for STvEA to properly transfer value from CODEX to CITE.
@@ -793,10 +799,6 @@ class Mapping:
             # select common protein columns
             codex_subset = self.stvea.codex_protein.loc[:, common_protein]
             cite_subset = self.stvea.cite_protein.loc[:, common_protein]
-    
-            # Final filter for any rows/columns that are all 0s/NAs
-            codex_subset = remove_all_zeros_or_na(codex_subset)
-            cite_subset = remove_all_zeros_or_na(cite_subset)
     
             # construct common CCA space.
             cca_data = Mapping.run_cca(cite_subset.T, codex_subset.T, True, num_cc=len(common_protein) - 1)
@@ -834,16 +836,20 @@ class Mapping:
             print(f"map_codex_to_cite: {round(end - start, 3)}")
         
         else:
-            common_protein = [protein for protein in self.stvea.codex_protein.columns if
-                              protein in self.stvea.cite_protein.columns]
-        
+            # Before finding common proteins, drop any proteins that are all 0s
+            codex_dropped = remove_all_zeros_or_na(self.stvea.codex_protein)
+            cite_dropped = remove_all_zeros_or_na(self.stvea.cite_protein)
+
+            # find common proteins
+            common_protein = [protein for protein in codex_dropped if
+                              protein in cite_dropped]
+            
             if len(common_protein) < 2:
                 print("Too few common proteins between CODEX proteins and CITE-seq proteins")
                 exit(1)
     
             # Shuffle the index of codex_subset
             codex_subset = self.stvea.codex_protein.loc[:, common_protein]
-            codex_subset = remove_all_zeros_or_na(codex_subset)
                               
             shuffled_index = np.random.permutation(codex_subset.index)
             codex_subset_shuffled = codex_subset.reindex(shuffled_index)
