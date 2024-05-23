@@ -65,4 +65,4 @@ pythonpath = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-"immunopheno.data" = ["hpca_genes.txt"]
+"immunopheno.data" = ["hpca_genes.txt", "cl_2024_05_15.owl"]
