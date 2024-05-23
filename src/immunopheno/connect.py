@@ -23,6 +23,7 @@ from .stvea_controller import Controller
 import math
 import scipy
 import copy
+from importlib.resources import files
 
 def _update_cl_owl():
     warnings.filterwarnings("ignore")
@@ -924,6 +925,7 @@ class ImmunoPhenoDB_Connect:
         self.imputed_reference = None
         self.transfer_matrix = None
         self._downsample_pairwise_graph = None
+        self._nn_dist = None
 
         if self.url is None:
             raise Exception("Error. Server URL must be provided")
@@ -941,8 +943,12 @@ class ImmunoPhenoDB_Connect:
         
         if self._OWL_graph is None:
             print("Loading necessary files...")
-            owl_link = _update_cl_owl()
-            G_nxo = from_file(owl_link)
+            try:
+                owl_link = _update_cl_owl()
+                G_nxo = from_file(owl_link)
+            except:
+                owl_link = str(files('immunopheno.data').joinpath('cl_2024_05_15.owl'))
+                G_nxo = from_file(owl_link)
             G = G_nxo.graph
             self._OWL_graph = G
         
@@ -1331,6 +1337,10 @@ class ImmunoPhenoDB_Connect:
                      mask=mask,
                      num_chunks=num_chunks,
                      num_cores=num_cores)
+        
+        # Store original nearest neighbor distances in class
+        nn_dist = cn.stvea.nn_dist_matrix
+        self._nn_dist = nn_dist
 
         # Store transfer_matrix in class
         transfer_matrix = cn.stvea.transfer_matrix
@@ -1460,7 +1470,8 @@ class ImmunoPhenoDB_Connect:
             return temp_copy
         else:
             print(f"Renaming {len(affected_cells_index)} cells with 'Not Assigned' label...")
-            temp_copy.labels.loc[affected_cells.index, ['labels', 'celltype']] = "Not Assigned"
+            temp_copy.labels.loc[affected_cells.index, ['labels', 'celltype']] = "Not Assigned" # Modify the normalized cell labels
+            temp_copy._cell_labels.loc[affected_cells.index, ['labels', 'celltype']] = "Not Assigned" # Modify the unnormalized cell labels
             print(f"Renamed {len(affected_cells_index)} cells.")
             return temp_copy
 
@@ -1480,7 +1491,7 @@ class ImmunoPhenoDB_Connect:
             idCLs.remove("Not Assigned")
         cell_labels_df = IPD.labels.copy(deep=True)
     
-        # Call filter function until no more labels are filtered out
+        # Call filter function until no more labels are filtered out. This modifies cell_labels_df in-place
         celltypes_remaining = keep_calling_part2(owl_graph_deepcopy.to_undirected(), 
                                                  downsample_graph_deepcopy, 
                                                  idCLs, 
@@ -1500,7 +1511,7 @@ class ImmunoPhenoDB_Connect:
         temp_copy._umap_kwargs = None
     
         # Set the new cell_labels_df in the temp object to return
-        temp_copy._cell_labels_filt_df = cell_labels_df
+        temp_copy.labels = cell_labels_df
     
         return temp_copy
 
