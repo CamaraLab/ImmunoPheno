@@ -919,6 +919,18 @@ class Mapping:
             nn_dists, nn_idx = nn.kneighbors(to_dataset)
             nn_dists = pd.DataFrame(nn_dists, index=self.stvea.codex_protein_corrected.index)
             nn_idx = pd.DataFrame(nn_idx, index=self.stvea.codex_protein_corrected.index)
+        
+        # Store original nn_dist matrix before applying gaussian kernel & normalization
+        idx_array_og = nn_idx.to_numpy()
+        weights_array_og = nn_dists.to_numpy()
+        rows_og = np.repeat(np.arange(idx_array_og.shape[0]), idx_array_og.shape[1])
+        cols_og = idx_array_og.flatten()
+        data_og = weights_array_og.flatten()
+        shape_og = (self.stvea.codex_protein_corrected.shape[0], self.stvea.cite_protein.shape[0])
+        nn_dist_matrix_og = coo_matrix((data_og, (rows_og, cols_og)), shape=shape_og)
+        self.stvea.nn_dist_matrix = pd.DataFrame(nn_dist_matrix_og.todense())
+        self.stvea.nn_dist_matrix.index = to_dataset.index
+        self.stvea.nn_dist_matrix.columns = from_dataset.index
 
         nn_dists_exp = np.exp(nn_dists / -c)
 

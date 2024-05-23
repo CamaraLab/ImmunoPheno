@@ -24,4 +24,4 @@ class STvEA:
     codex_mask = pd.Series()
 
     transfer_matrix = pd.DataFrame()
-    
+    nn_dist_matrix = pd.DataFrame()
