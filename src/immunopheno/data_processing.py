@@ -1609,7 +1609,7 @@ class ImmunoPhenoData:
         return self._cell_labels_filt_df
     
     @labels.setter
-    def labels(self, value):
+    def labels(self, value: pd.DataFrame):
         self._cell_labels_filt_df = value #  Change the norm_cell_labels
         # If the cells in 'value' are found in the original table, update those rows too
         common_indices = self._cell_labels.index.intersection(self._cell_labels_filt_df.index)
