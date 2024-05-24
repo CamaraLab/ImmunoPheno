@@ -24,6 +24,7 @@ import math
 import scipy
 import copy
 from importlib.resources import files
+from scipy.stats import entropy
 
 def _update_cl_owl():
     warnings.filterwarnings("ignore")
@@ -680,6 +681,7 @@ def fast_cell_label_graph(adj_mat):
 
     return G
 
+#   Part 1 Filtering
 def run_fisher_exact_test(G, celltype_of_interest):
     # Initialize counts for each quadrant of the contingency table
     quadrant1_count = 0  # Both nodes do not have "celltype"
@@ -725,6 +727,7 @@ def compare_idCL(G, cl1, cl2):
     distance = nx.shortest_path_length(G_undirected, source=cl1, target=cl2)
     return distance
 
+#   Part 2 Filtering
 def part2_filter(owl_graph, downsample_graph, idCLs, cell_labels_df, p_threshold=0.05, epsilon=4) -> list:
     """
     This function needs to take in 2 different graphs
@@ -913,6 +916,101 @@ def keep_calling_part2(owl_graph, downsample_graph, idCLs, cell_labels_df, p_thr
     
     # Return the final modified_idCLs
     return modified_idCLs
+
+#   Part 3 Filtering (Requires run_stvea() output: nearest neighbor distances)
+def calculate_D1(nn_dist):
+    results = pd.DataFrame()
+    # Find all nearest neighbors (non-zero value) for each row (query cell)
+    # Take the sum of all the distances to each nearest neighbor
+    non_zero_sums = nn_dist[nn_dist != 0].sum(axis=1)
+
+    # Count the number of neighbors for each row
+    non_zero_counts = (nn_dist != 0).sum(axis=1)
+
+    # Find the average for each row
+    average_non_zero_values = non_zero_sums / non_zero_counts
+    results['avg_nn_distance'] = average_non_zero_values
+
+    return results
+
+def calculate_D2_fast(nn_dist):
+    # List to hold all average pairwise distances for each row/query cell
+    avg_pairwise_distances = []
+
+    # Number of query cells to iterate over
+    num_rows = len(nn_dist.index)
+
+    for row_index in range(num_rows):
+        row = nn_dist.iloc[row_index]
+        # Isolate non-zero values for the selected row. These are the nearest neighbors for that cell/row
+        non_zero_values_row = row[row != 0]
+
+        # Convert non_zero_values_row to a numpy array
+        neighbor_distances = non_zero_values_row.values
+
+        # Compute the number of neighbors
+        num_neighbors = len(neighbor_distances)
+
+        if num_neighbors > 1:
+            # Compute pairwise distances using broadcasting
+            pairwise_distances = np.abs(neighbor_distances[:, np.newaxis] - neighbor_distances[np.newaxis, :])
+
+            # Compute the sum of all pairwise values in the upper triangle (excluding diagonal)
+            sum_pairwise_values = np.sum(np.triu(pairwise_distances, k=1))
+
+            # Count the number of pairwise values in the upper triangle
+            num_pairwise_values = (num_neighbors * (num_neighbors - 1)) / 2
+
+            # Compute the average of all pairwise values
+            average_pairwise_value = sum_pairwise_values / num_pairwise_values
+        else:
+            average_pairwise_value = 0
+
+        avg_pairwise_distances.append(average_pairwise_value)
+
+    d2_df = pd.DataFrame(index=nn_dist.index, data=avg_pairwise_distances, columns=["avg_pairwise_distance"])
+    return d2_df
+
+def calculate_D1_D2_ratio(D1, D2):
+    # Combine the two dataframes
+    combined = pd.concat([D1, D2], axis=1)
+
+    # Calculate the ratio now for nn_distance/pairwise_distance
+    combined['ratio'] = combined['avg_nn_distance'] / combined['avg_pairwise_distance']
+    return combined
+
+#   Part 4 Filtering (Requires run_stvea() output: transfer matrix and imputed reference dataset from server)
+def group_cells_by_type(imputed_reference):
+    cell_indices_by_type = {}
+    
+    # Single out the 'idCL' column
+    protein_idCLs = imputed_reference['idCL']
+
+    # Group all rows by cell type
+    grouped = protein_idCLs.to_frame().groupby('idCL')
+    
+    # Add to dictionary
+    for cell_type, group in grouped:
+        cell_indices_by_type[cell_type] = group.index
+
+    return cell_indices_by_type
+
+def calculate_entropies_fast(transfer_matrix, cell_indices_by_type):
+    # Create a DataFrame to hold the summed probabilities for each cell type
+    cell_type_sums = pd.DataFrame(index=transfer_matrix.index)
+
+    # Compute the sums of the probabilities for each cell type
+    for cell_type, indices in cell_indices_by_type.items():
+        # print(indices)
+        cell_type_sums[cell_type] = transfer_matrix[indices].sum(axis=1)
+    
+    # Calculate entropy for each query cell
+    entropies = cell_type_sums.apply(lambda row: entropy(row), axis=1)
+    
+    # Convert the result to a DataFrame
+    entropies_df = entropies.to_frame(name='entropy')
+    
+    return entropies_df
 
 class ImmunoPhenoDB_Connect:
     def __init__(self, url: str):
@@ -1379,8 +1477,6 @@ class ImmunoPhenoDB_Connect:
 
     def _part1_localization(self, IPD, p_threshold=0.05, remove=False):
         """
-        Act like this is a class method with "self" for the time being
-        
         Remove: the option to either remove cells completely from the object after filtering
                 OR set it to "Not Assigned" instead in the cell annotations
         """
@@ -1439,12 +1535,20 @@ class ImmunoPhenoDB_Connect:
                 labels_to_remove.append(celltype)
     
         ## REMOVAL/RENAME step
-        print(f"Number of cell types to remove/rename:", len(labels_to_remove))
-        print("Cell types to remove/rename:", labels_to_remove)
+        if remove:
+            print(f"Number of cell types to remove:", len(labels_to_remove))
+        else:
+            print(f"Number of cell types to rename:", len(labels_to_remove))
         
-        # Find which cells contain these labels
         affected_cells = norm_counts_labels[norm_counts_labels['idCL'].isin(labels_to_remove)]
         affected_cells_index = list(affected_cells.index)
+
+        # Find which cells contain these labels
+        grouped = affected_cells['idCL'].to_frame().groupby('idCL')
+        for cell_type, group in grouped:
+            if cell_type == "Not Assigned":
+                continue
+            print(f"{cell_type}: {len(group.index)}")
     
         # Make a copy of the object to return
         temp_copy = copy.deepcopy(IPD)
@@ -1478,6 +1582,47 @@ class ImmunoPhenoDB_Connect:
     def _part2_merging(self, IPD, p_threshold=0.05, epsilon=4):
         # Create a deepcopy of the OWL graph. This one will be constantly updated
         owl_graph_deepcopy = copy.deepcopy(self._OWL_graph)
+
+        # If the downsampled pairwise distance graph doesn't exist, create it now
+        if self._downsample_pairwise_graph is None:
+            # We will be working with the normalized_counts and labels in the IPD object
+            # First, we will need to ignore all initial cells labeled as "Not Assigned"
+            filtered_index = IPD.labels[IPD.labels['labels'] != 'Not Assigned'].index
+            norm_counts = pd.DataFrame(IPD.normalized_counts.loc[filtered_index])
+            norm_labels = pd.DataFrame(IPD.labels.loc[filtered_index])
+        
+            # Temporarily rename the "labels" column to "idCL"
+            norm_counts_labels = norm_labels.rename(columns={"labels":"idCL"})
+            
+            # Combine the normalized protein with the labels field containing "idCL"
+            norm_combine = pd.concat([norm_counts, norm_counts_labels.loc[norm_labels.index]["idCL"]], axis = 1)
+        
+            ## GRAPH CREATION ## 
+            # Create dictionary of cell barcodes to their cell types
+            ct_lookup = norm_counts_labels["idCL"].to_dict()
+        
+            # Downsample to 5000 cells and get pairwise distance matrix
+            print("Downsampling dataset to 5000 cells...")
+            ds_norm = downsample(norm_combine, downsample_size=5000)
+        
+            # Calculate the pairwise correlation distances between all rows (cells)
+            print("Calculating pairwise distances between cells...")
+            df_without_idCL = ds_norm.drop(columns=["idCL"])
+            pairwise_correlation = (1 - df_without_idCL.T.corr())
+        
+            # Create adjacency matrix
+            adj_mat = pearson_correlation_adjaceny_matrix(pairwise_correlation)
+        
+            # Create graph
+            print("Generating cell graph...")
+            G = fast_cell_label_graph(adj_mat)
+        
+            # Set cell type for each node in graph
+            nx.set_node_attributes(G, ct_lookup, "celltype")
+        
+            ###################################### Store this graph object in the class
+            self._downsample_pairwise_graph = G
+        
         # Create a deepcopy of the downsampled pairwise distance graph. It will be updated as well
         downsample_graph_deepcopy = copy.deepcopy(self._downsample_pairwise_graph)
     
@@ -1514,19 +1659,188 @@ class ImmunoPhenoDB_Connect:
         temp_copy.labels = cell_labels_df
     
         return temp_copy
+    
+    def _part3_reassign_by_distance_ratio(self, IPD, distance_ratio_threshold=10):
+        if self._nn_dist is None:
+            raise Exception("Missing distance matrix. run_stvea() must be called to filter by distance ratios.")
 
-    def filter_labels(self, IPD, p_threshold=0.05, remove_labels=False, epsilon=4, merging=False):
-        # Localization is performed by default
-        if merging is False:
+        cell_labels_df = IPD.labels
+        
+        # D1 values
+        d1_df = calculate_D1(self._nn_dist)
+
+        # D2 values
+        d2_df = calculate_D2_fast(self._nn_dist)
+
+        # D1/D2 ratio
+        ratio_df = calculate_D1_D2_ratio(d1_df, d2_df)        
+
+        # Find all rows/cells with a ratio greater than the threshold
+        cells_to_unlabel = ratio_df[ratio_df["ratio"] > distance_ratio_threshold]
+
+        # Re-assign all affected cells with "Not Assigned"
+        temp_labels = cell_labels_df.copy(deep=True)
+        
+        # Find the number of cells for each cell type getting re-assigned
+        cells_group_df = (temp_labels.loc[cells_to_unlabel.index])
+        # Disregard cells that were already named "Not assigned"
+        num_cells_already_not_assigned = sum(cells_group_df["labels"] == "Not Assigned")
+        print("Number of cells renamed to 'Not Assigned':", len(cells_group_df) - num_cells_already_not_assigned )
+        
+        # Group all rows by cell type
+        grouped = cells_group_df.groupby('labels')
+        for cell_type, group in grouped:
+            if cell_type == "Not Assigned":
+                continue
+            print(f"{cell_type}: {len(group.index)}")
+
+        # Renaming step
+        temp_labels.loc[cells_to_unlabel.index, ['labels', 'celltype']] = "Not Assigned"
+
+        # Set this temp_labels table in a new IPD object
+        temp_copy = copy.deepcopy(IPD)
+        # This function needs to reset the UMAPs present. So remove _raw_umap and _norm_umap and set to None
+        temp_copy._raw_umap = None
+        temp_copy._norm_umap = None
+        temp_copy._umap_kwargs = None
+
+        # Set the new cell_labels_df in the temp object to return
+        temp_copy.labels = temp_labels
+        
+        return temp_copy
+    
+    def _part4_reassign_by_entropy(self, IPD, entropy_threshold=10):
+        if self.transfer_matrix is None or self.imputed_reference is None:
+            raise Exception("Missing transfer_matrix/imputed_reference. run_stvea() must be called to filter by entropies.")
+        
+        cell_labels_df = IPD.labels
+        
+        # Find cell indices for each cell type
+        cell_indices_by_type = group_cells_by_type(self.imputed_reference)
+
+        # Calculate entropies for each cell type for each query cell in transfer matrix
+        entropies_df = calculate_entropies_fast(self.transfer_matrix, cell_indices_by_type)
+        
+        # Find all rows/cells with a ratio greater than the threshold
+        cells_to_unlabel = entropies_df[entropies_df["entropy"] > entropy_threshold]
+        
+        # Re-assign all affected cells with "Not Assigned"
+        temp_labels = cell_labels_df.copy(deep=True)
+        
+        # Find the number of cells for each cell type getting re-assigned
+        cells_group_df = (temp_labels.loc[cells_to_unlabel.index])
+        # Disregard cells that were already named "Not assigned"
+        num_cells_already_not_assigned = sum(cells_group_df["labels"] == "Not Assigned")
+        print("Number of cells renamed to 'Not Assigned':", len(cells_group_df) - num_cells_already_not_assigned )
+        
+        # Group all rows by cell type
+        grouped = cells_group_df.groupby('labels')
+        for cell_type, group in grouped:
+            if cell_type == "Not Assigned":
+                continue
+            print(f"{cell_type}: {len(group.index)}")
+
+        # Renaming step
+        temp_labels.loc[cells_to_unlabel.index, ['labels', 'celltype']] = "Not Assigned"
+
+        # Set this temp_labels table in a new IPD object
+        temp_copy = copy.deepcopy(IPD)
+        # This function needs to reset the UMAPs present. So remove _raw_umap and _norm_umap and set to None
+        temp_copy._raw_umap = None
+        temp_copy._norm_umap = None
+        temp_copy._umap_kwargs = None
+
+        # Set the new cell_labels_df in the temp object to return
+        temp_copy.labels = temp_labels
+        
+        return temp_copy
+    
+    def plot_filter_metrics(self):
+        # Check if transfer_matrix and imputed_reference exists
+        if self._nn_dist is None or self.transfer_matrix is None or self.imputed_reference is None:
+            raise Exception("Missing transfer_matrix. run_stvea() must be called to use plot_filter_metrics()")
+        
+        # Plot distance D1/D2 ratios
+        # D1 values
+        d1_df = calculate_D1(self._nn_dist)
+
+        # D2 values
+        d2_df = calculate_D2_fast(self._nn_dist)
+
+        # D1/D2 ratio
+        ratio = calculate_D1_D2_ratio(d1_df, d2_df)        
+
+        # Plot a histogram of all ratio values to decide on the ratio_threshold
+        ratio_fig = px.histogram(ratio["ratio"], title="D1/D2 Ratios For All Query Cells" + 
+                            "<br>" +
+                            "<sup>D1: Average distance between nearest neighbor and query cell</sup>" +
+                            "<br>" + 
+                            "<sup>D2: Average pairwise distance among nearest neighbors</sup>").update_layout(height=500)
+        ratio_fig.show()
+
+        # Plot entropy values
+        # Find cell indices for each cell type
+        cell_indices_by_type = group_cells_by_type(self.imputed_reference)
+
+        # Calculate entropies for each cell type for each query cell in transfer matrix
+        entropies_df = calculate_entropies_fast(self.transfer_matrix, cell_indices_by_type)
+
+        entropy_fig = px.histogram(entropies_df["entropy"], title="Entropies For All Query Cells").update_layout(height=500)
+        entropy_fig.show()
+
+    def filter_labels(self, 
+                      IPD,
+                      localization=False,               # Filtering step
+                      merging=False,                    # Filtering step
+                      distance_ratio=False,             # Filtering step
+                      entropy=False,                    # Filtering step
+                      p_threshold_localization=0.05,    # P value threshold for fisher exact test during localization 
+                      remove_labels_localization=False, # Remove or re-label cells as "Not Assigned" during localization
+                      p_threshold_merging=0.05,         # P value threshold during merging
+                      epsilon_merging=4,                # Epsilon value for deciding to merge two cell types based on proportion ratio
+                      distance_ratio_threshold=2,       # Ratio threshold when filtering cells by NN distance ratios (D1/D2)
+                      entropy_threshold=2):             # Entropy threshold when filtering cells by total entropy for cell types
+        
+        # Ensure at least one of the filtering steps is enabled
+        if not (localization or merging or distance_ratio or entropy):
+            raise ValueError("At least one of 'localization', 'merging', 'distance_ratio', or 'entropy' must be set to True.")
+        
+        # Issue warnings for unused parameters
+        if not localization:
+            logging.warning("Parameters for localization will be ignored because 'localization' is set to False.")
+        
+        if not merging:
+            logging.warning("Parameters for merging will be ignored because 'merging' is set to False.")
+        
+        if not distance_ratio:
+            logging.warning("Parameters for distance_ratio will be ignored because 'distance_ratio' is set to False.")
+        
+        if not entropy:
+            logging.warning("Parameters for entropy will be ignored because 'entropy' is set to False.")
+        
+        # Start with the initial IPD
+        IPD_new = copy.deepcopy(IPD)
+        
+        # Call the localization function if needed
+        if localization:
             print("Performing localization...")
-            ipd_after_localization = self._part1_localization(IPD, p_threshold=p_threshold, remove=remove_labels)
-            print("Localization complete.")
-            return ipd_after_localization
-        elif merging is True:
-            print("Performing localization...")
-            ipd_after_localization = self._part1_localization(IPD, p_threshold=p_threshold, remove=remove_labels)
-            print("Localization complete.")
-            print("\nPerforming merging...")
-            ipd_after_localization_merging = self._part2_merging(ipd_after_localization, p_threshold=p_threshold, epsilon=epsilon)
-            print("Merging complete.")
-            return ipd_after_localization_merging
+            IPD_new = self._part1_localization(IPD=IPD_new, p_threshold=p_threshold_localization, remove=remove_labels_localization)
+            print("Localization complete.\n")
+        # Call the merging function if needed
+        if merging:
+            print("Performing merging...")
+            IPD_new = self._part2_merging(IPD=IPD_new, p_threshold=p_threshold_merging, epsilon=epsilon_merging)
+            print("Merging complete.\n")
+        # Call the distance_ratio function if needed
+        if distance_ratio:
+            print("Performing nearest neighbor distance ratio filtering...")
+            IPD_new = self._part3_reassign_by_distance_ratio(IPD=IPD_new, distance_ratio_threshold=distance_ratio_threshold)
+            print("Distance_ratio filtering complete.\n")
+        # Call the entropy function if needed
+        if entropy:
+            print("Performing cell type entropy filtering...")
+            IPD_new = self._part4_reassign_by_entropy(IPD=IPD_new, entropy_threshold=entropy_threshold)
+            print("Entropy filtering complete.\n")
+        
+        return IPD_new
+        
