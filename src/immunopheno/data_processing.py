@@ -1922,6 +1922,28 @@ class ImmunoPhenoData:
                                     **kwargs)
             self._all_fits_dict[ab] = fits
             fit_all_results.append(fits)
+        
+        number_3_component = 0
+        number_2_component = 0
+        all_1_component = []
+
+        for ab_name, fit_results in self._all_fits_dict.items():
+            num_components = next(iter(fit_results))
+            if num_components == 3:
+                number_3_component += 1
+            elif num_components == 2:
+                number_2_component += 1
+            elif num_components == 1:
+                all_1_component.append(ab_name)
+                
+        print("Number of 3 component models:", number_3_component)
+        print("Number of 2 component models:", number_2_component)
+        print("Number of 1 component models:", len(all_1_component))
+
+        if len(all_1_component) > 0:
+            print("Antibodies of 1 component models:")
+            for background_ab in all_1_component:
+                print(background_ab)
 
         # Store in class
         self._all_fits = fit_all_results
