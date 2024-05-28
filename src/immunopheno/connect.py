@@ -1833,6 +1833,8 @@ class ImmunoPhenoDB_Connect:
                 if isinstance(attr_value, pd.DataFrame):
                     # If the attribute is a DataFrame, drop rows from it using the provided index
                     setattr(IPD_new, attr_name, attr_value.drop(index=affected_cells_index, errors='ignore'))
+            
+            print(f"Removed {len(affected_cells_index)} cells from object.")
         
         return IPD_new
         
