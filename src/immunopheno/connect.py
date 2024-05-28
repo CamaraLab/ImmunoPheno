@@ -1469,7 +1469,7 @@ class ImmunoPhenoDB_Connect:
         print("Annotation transfer complete.")
         return IPD
 
-    def _part1_localization(self, IPD, p_threshold=0.05, remove=False):
+    def _part1_localization(self, IPD, p_threshold=0.05):
         """
         Remove: the option to either remove cells completely from the object after filtering
                 OR set it to "Not Assigned" instead in the cell annotations
@@ -1528,11 +1528,8 @@ class ImmunoPhenoDB_Connect:
             if p_val > p_threshold:
                 labels_to_remove.append(celltype)
     
-        ## REMOVAL/RENAME step
-        if remove:
-            print(f"Number of cell types to remove:", len(labels_to_remove))
-        else:
-            print(f"Number of cell types to rename:", len(labels_to_remove))
+        ## RENAME step
+        print(f"Number of cell types to rename:", len(labels_to_remove))
         
         affected_cells = norm_counts_labels[norm_counts_labels['idCL'].isin(labels_to_remove)]
         affected_cells_index = list(affected_cells.index)
@@ -1552,26 +1549,11 @@ class ImmunoPhenoDB_Connect:
         temp_copy._norm_umap = None
         temp_copy._umap_kwargs = None
         
-        # If removing cells, remove from all parts of the object
-        if remove:
-            print(f"Removing {len(affected_cells_index)} cells from object...")
-            # Filter out attributes that start with an underscore and are not properties
-            attrs_to_iterate = [attr_name for attr_name in dir(temp_copy) if attr_name.startswith('_') and not isinstance(getattr(temp_copy.__class__, attr_name, None), property)]
-            
-            for attr_name in attrs_to_iterate:
-                attr_value = getattr(temp_copy, attr_name)
-                if isinstance(attr_value, pd.DataFrame):
-                    # If the attribute is a DataFrame, drop rows from it using the provided index
-                    setattr(temp_copy, attr_name, attr_value.drop(index=affected_cells_index, errors='ignore'))
-            
-            print(f"Removed {len(affected_cells_index)} cells from object.")    
-            return temp_copy
-        else:
-            print(f"Renaming {len(affected_cells_index)} cells with 'Not Assigned' label...")
-            temp_copy.labels.loc[affected_cells.index, ['labels', 'celltype']] = "Not Assigned" # Modify the normalized cell labels
-            temp_copy._cell_labels.loc[affected_cells.index, ['labels', 'celltype']] = "Not Assigned" # Modify the unnormalized cell labels
-            print(f"Renamed {len(affected_cells_index)} cells.")
-            return temp_copy
+        print(f"Renaming {len(affected_cells_index)} cells with 'Not Assigned' label...")
+        temp_copy.labels.loc[affected_cells.index, ['labels', 'celltype']] = "Not Assigned" # Modify the normalized cell labels
+        temp_copy._cell_labels.loc[affected_cells.index, ['labels', 'celltype']] = "Not Assigned" # Modify the unnormalized cell labels
+        print(f"Renamed {len(affected_cells_index)} cells.")
+        return temp_copy
 
     def _part2_merging(self, IPD, p_threshold=0.05, epsilon=4):
         # Create a deepcopy of the OWL graph. This one will be constantly updated
@@ -1789,11 +1771,11 @@ class ImmunoPhenoDB_Connect:
                       distance_ratio=False,             # Filtering step
                       entropy=False,                    # Filtering step
                       p_threshold_localization=0.05,    # P value threshold for fisher exact test during localization 
-                      remove_labels_localization=False, # Remove or re-label cells as "Not Assigned" during localization
                       p_threshold_merging=0.05,         # P value threshold during merging
                       epsilon_merging=4,                # Epsilon value for deciding to merge two cell types based on proportion ratio
                       distance_ratio_threshold=2,       # Ratio threshold when filtering cells by NN distance ratios (D1/D2)
-                      entropy_threshold=2):             # Entropy threshold when filtering cells by total entropy for cell types
+                      entropy_threshold=2,              # Entropy threshold when filtering cells by total entropy for cell types
+                      remove_labels=False):             # Remove cells as "Not Assigned" at the end of filtering:             
         
         # Ensure at least one of the filtering steps is enabled
         if not (localization or merging or distance_ratio or entropy):
@@ -1818,7 +1800,7 @@ class ImmunoPhenoDB_Connect:
         # Call the localization function if needed
         if localization:
             print("Performing localization...")
-            IPD_new = self._part1_localization(IPD=IPD_new, p_threshold=p_threshold_localization, remove=remove_labels_localization)
+            IPD_new = self._part1_localization(IPD=IPD_new, p_threshold=p_threshold_localization)
             print("Localization complete.\n")
         # Call the merging function if needed
         if merging:
@@ -1835,6 +1817,22 @@ class ImmunoPhenoDB_Connect:
             print("Performing cell type entropy filtering...")
             IPD_new = self._part4_reassign_by_entropy(IPD=IPD_new, entropy_threshold=entropy_threshold)
             print("Entropy filtering complete.\n")
+        
+        # Make sure all "Not Assigned" rows are consistent in both "labels" and "celltypes" column of IPD.labels
+        IPD_new.labels.loc[IPD_new.labels["labels"] == "Not Assigned", "celltype"] = "Not Assigned"
+        affected_cells_index = IPD_new.labels[IPD_new.labels["labels"] == "Not Assigned"].index
+        
+        # Remove all rows/cells that had "Not Assigned"
+        if remove_labels:
+            print(f"Removing {len(affected_cells_index)} cells with 'Not Assigned' from object...")
+            # Filter out attributes that start with an underscore and are not properties
+            attrs_to_iterate = [attr_name for attr_name in dir(IPD_new) if attr_name.startswith('_') and not isinstance(getattr(IPD_new.__class__, attr_name, None), property)]
+            
+            for attr_name in attrs_to_iterate:
+                attr_value = getattr(IPD_new, attr_name)
+                if isinstance(attr_value, pd.DataFrame):
+                    # If the attribute is a DataFrame, drop rows from it using the provided index
+                    setattr(IPD_new, attr_name, attr_value.drop(index=affected_cells_index, errors='ignore'))
         
         return IPD_new
         
