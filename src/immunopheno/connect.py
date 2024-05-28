@@ -1355,12 +1355,14 @@ class ImmunoPhenoDB_Connect:
                   mask: bool = True,
                   num_chunks=1,
                   num_cores=1):
+        
+        IPD_new = copy.deepcopy(IPD)
 
         # Check if reference query parameters have changed OR if the reference table is empty
-        if (IPD, IPD._stvea_correction_value, idBTO, idExperiment, 
+        if (IPD_new, IPD_new._stvea_correction_value, idBTO, idExperiment, 
             parse_option, rho, population_size) != self._last_stvea_params or self.imputed_reference is None:
 
-            antibody_pairs = [[key, value] for key, value in IPD._ab_ids_dict.items()]
+            antibody_pairs = [[key, value] for key, value in IPD_new._ab_ids_dict.items()]
         
             stvea_body = {
                 "antibody_pairs": antibody_pairs,
@@ -1395,10 +1397,10 @@ class ImmunoPhenoDB_Connect:
 
             # Apply stvea_correction value
             self.imputed_reference = imputed_reference.copy(deep=True).applymap(
-                        lambda x: x - IPD._stvea_correction_value if (x != 0 and type(x) is not str) else x)
+                        lambda x: x - IPD_new._stvea_correction_value if (x != 0 and type(x) is not str) else x)
 
             # Store these parameters to check for subsequent function calls
-            self._last_stvea_params = (IPD, IPD._stvea_correction_value, idBTO, idExperiment, 
+            self._last_stvea_params = (IPD_new, IPD_new._stvea_correction_value, idBTO, idExperiment, 
                                        parse_option, rho, population_size)
 
         # Separate out the antibody counts from the cell IDs 
@@ -1406,7 +1408,7 @@ class ImmunoPhenoDB_Connect:
         imputed_idCLs = self.imputed_reference['idCL'].to_frame()
     
         # Convert antibody names from CODEX normalized counts to their IDs
-        codex_normalized_with_ids = IPD._normalized_counts_df.rename(columns=IPD._ab_ids_dict, inplace=False)
+        codex_normalized_with_ids = IPD_new._normalized_counts_df.rename(columns=IPD_new._ab_ids_dict, inplace=False)
     
         # Perform check for rows/columns with all 0s or NAs
         codex_normalized_with_ids = remove_all_zeros_or_na(codex_normalized_with_ids)
@@ -1450,24 +1452,24 @@ class ImmunoPhenoDB_Connect:
         labels_df['celltype'] = labels_df['labels'].map(idCL_names)
         
         # Before setting norm_cell_types, check if it matches the previous. If not, reset norm_umap field
-        if not (labels_df.equals(IPD._cell_labels_filt_df)):
-            IPD._norm_umap = None
-        IPD._cell_labels_filt_df = labels_df
+        if not (labels_df.equals(IPD_new._cell_labels_filt_df)):
+            IPD_new._norm_umap = None
+        IPD_new._cell_labels_filt_df = labels_df
         
         # Add labels to raw cell labels as well. The filtered rows will be marked as "filtered"
-        original_cells_index = IPD.protein.index
-        merged_df = IPD._cell_labels_filt_df.reindex(original_cells_index)
+        original_cells_index = IPD_new.protein.index
+        merged_df = IPD_new._cell_labels_filt_df.reindex(original_cells_index)
         merged_df = merged_df.fillna("filtered_by_stvea")
 
         # Check if the raw and norm labels have changed. If so, reset the UMAP field in IPD
-        if not (merged_df.equals(IPD._cell_labels)):
-            IPD._raw_umap = None
-        IPD._cell_labels = merged_df
+        if not (merged_df.equals(IPD_new._cell_labels)):
+            IPD_new._raw_umap = None
+        IPD_new._cell_labels = merged_df
 
         # Make sure the indexes match
-        IPD._normalized_counts_df = IPD._normalized_counts_df.loc[IPD._cell_labels_filt_df.index]
+        IPD_new._normalized_counts_df = IPD_new._normalized_counts_df.loc[IPD_new._cell_labels_filt_df.index]
         print("Annotation transfer complete.")
-        return IPD
+        return IPD_new
 
     def _part1_localization(self, IPD, p_threshold=0.05):
         """
