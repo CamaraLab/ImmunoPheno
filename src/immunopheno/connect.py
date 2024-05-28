@@ -1342,8 +1342,6 @@ class ImmunoPhenoDB_Connect:
                   idExperiment: list = None, 
                   parse_option: int = 1,
                   rho: float = 0.5,
-                  pairwise_threshold: float = 1.0, 
-                  na_threshold: float = 1.0, 
                   population_size: int = 50,
                   # STvEA parameters
                   k_find_nn: int = 80,
@@ -1360,8 +1358,7 @@ class ImmunoPhenoDB_Connect:
 
         # Check if reference query parameters have changed OR if the reference table is empty
         if (IPD, IPD._stvea_correction_value, idBTO, idExperiment, 
-            parse_option, rho, pairwise_threshold, 
-            na_threshold, population_size) != self._last_stvea_params or self.imputed_reference is None:
+            parse_option, rho, population_size) != self._last_stvea_params or self.imputed_reference is None:
 
             antibody_pairs = [[key, value] for key, value in IPD._ab_ids_dict.items()]
         
@@ -1370,8 +1367,6 @@ class ImmunoPhenoDB_Connect:
                 "idBTO": idBTO,
                 "idExperiment": idExperiment,
                 "parse_option": parse_option,
-                "pairwise_threshold": pairwise_threshold,
-                "na_threshold": na_threshold,
                 "population_size": population_size
             }
 
@@ -1404,8 +1399,7 @@ class ImmunoPhenoDB_Connect:
 
             # Store these parameters to check for subsequent function calls
             self._last_stvea_params = (IPD, IPD._stvea_correction_value, idBTO, idExperiment, 
-                                       parse_option, rho, pairwise_threshold, 
-                                       na_threshold, population_size)
+                                       parse_option, rho, population_size)
 
         # Separate out the antibody counts from the cell IDs 
         imputed_antibodies = self.imputed_reference.loc[:, self.imputed_reference.columns != 'idCL']
