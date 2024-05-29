@@ -1287,7 +1287,7 @@ class ImmunoPhenoDB_Connect:
         
         exp_response = requests.post(f"{self.url}/api/findexperiments", json=exp_body)
         if 'text/html' in exp_response.headers.get('content-type'):
-            return exp_response.text
+            raise Exception(exp_response.text)
         elif 'application/json' in exp_response.headers.get('content-type'):
             res_JSON = exp_response.json()
             res_df = pd.DataFrame.from_dict(res_JSON)
@@ -1302,7 +1302,7 @@ class ImmunoPhenoDB_Connect:
         
         wa_response = requests.post(f"{self.url}/api/whichantibodies", json=wa_body)
         if 'text/html' in wa_response.headers.get('content-type'):
-            return wa_response.text
+            raise Exception(wa_response.text)
         elif 'application/json' in wa_response.headers.get('content-type'):
             res_JSON = wa_response.json()
             res_df = pd.DataFrame.from_dict(res_JSON)
@@ -1317,7 +1317,7 @@ class ImmunoPhenoDB_Connect:
         
         wc_response = requests.post(f"{self.url}/api/whichcelltypes", json=wc_body)
         if 'text/html' in wc_response.headers.get('content-type'):
-            return wc_response.text
+            raise Exception(wc_response.text)
         elif 'application/json' in wc_response.headers.get('content-type'):
             res_JSON = wc_response.json()
             res_df = pd.DataFrame.from_dict(res_JSON)
@@ -1330,7 +1330,7 @@ class ImmunoPhenoDB_Connect:
         }
         we_response = requests.post(f"{self.url}/api/whichexperiments", json=we_body)
         if 'text/html' in we_response.headers.get('content-type'):
-            return we_response.text
+            raise Exception(we_response.text)
         elif 'application/json' in we_response.headers.get('content-type'):
             res_JSON = we_response.json()
             res_df = pd.DataFrame.from_dict(res_JSON)
@@ -1376,7 +1376,7 @@ class ImmunoPhenoDB_Connect:
             timeout = (600, 600) # connection, read timeout
             stvea_response = requests.post(f"{self.url}/api/stveareference", json=stvea_body, timeout=timeout)
             if 'text/html' in stvea_response.headers.get('content-type'):
-                return stvea_response.text
+                raise Exception(stvea_response.text)
             elif 'application/json' in stvea_response.headers.get('content-type'):
                 res_JSON = stvea_response.json()
                 reference_dataset = pd.DataFrame.from_dict(res_JSON)
@@ -1839,4 +1839,19 @@ class ImmunoPhenoDB_Connect:
             print(f"Removed {len(affected_cells_index)} cells from object.")
         
         return IPD_new
-        
+    
+    def db_stats(self):
+        stats_res = requests.get(f"{self.url}/api/databasestatistics")  
+        if 'text/html' in stats_res.headers.get('content-type'):
+            raise Exception(stats_res.text)
+        elif 'application/json' in stats_res.headers.get('content-type'):
+            stats_JSON = stats_res.json()
+
+        print("Database Statistics\n===================")
+        print("Number of experiments:", stats_JSON["num_exp"])
+        print("Number of tissues:", stats_JSON["num_tissue"])
+        print("Number of cells:", stats_JSON["num_cells"])
+        print("Number of antibodies:", stats_JSON["num_ab"])
+        print("Number of antibody targets:", stats_JSON["num_targets"])
+        print("Number of antibody clones:", stats_JSON["num_clones"])
+        print("Average number of experiments per antibody:", "{:.2f}".format(stats_JSON["avg_exp"]))
