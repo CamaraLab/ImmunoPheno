@@ -1336,7 +1336,7 @@ def _normalize_antibodies_df(protein_cleaned_filt_df: pd.DataFrame,
 
     return normalized_df_transpose
 
-def convert_idCL_readable(idCL:str) -> str:
+def _convert_idCL_readable(idCL:str) -> str:
     """
     Converts a cell ontology id (CL:XXXXXXX) into a readable cell type name
 
@@ -1362,7 +1362,7 @@ def convert_idCL_readable(idCL:str) -> str:
     
     return cellType
 
-def ebi_idCL_map(labels_df: pd.DataFrame) -> dict:
+def _ebi_idCL_map(labels_df: pd.DataFrame) -> dict:
     """
     Converts a list of cell ontology IDs into readable cell type names
     as a dictionary
@@ -1379,7 +1379,7 @@ def ebi_idCL_map(labels_df: pd.DataFrame) -> dict:
     idCLs = set(labels_df["labels"])
     
     for idCL in idCLs:
-        idCL_map[idCL] = convert_idCL_readable(idCL)
+        idCL_map[idCL] = _convert_idCL_readable(idCL)
     
     return idCL_map
 
@@ -1668,7 +1668,7 @@ class ImmunoPhenoData:
             # Check if the "labels" column exists
             if "labels" in self._cell_labels:
                 # Create mapping dictionary using values in the "labels" field
-                labels_map = ebi_idCL_map(self._cell_labels)
+                labels_map = _ebi_idCL_map(self._cell_labels)
 
                 # Map all values from dictionary back onto the "celltype" field
                 temp_df = self._cell_labels.copy(deep=True)
