@@ -1571,22 +1571,6 @@ class ImmunoPhenoData:
         return new_instance
 
     @property
-    def all_fits_dict(self):
-        return self._all_fits_dict
-
-    @property
-    def classified_filt(self):
-        return self._classified_filt_df
-
-    @property
-    def z_scores(self):
-        return self._z_scores_df
-
-    @property
-    def normalized_counts(self):
-        return self._normalized_counts_df
-
-    @property
     def protein(self):
         return self._protein_matrix
 
@@ -1601,6 +1585,14 @@ class ImmunoPhenoData:
     @rna.setter
     def rna(self, value):
         self._gene_matrix = value
+    
+    @property
+    def fits(self):
+        return self._all_fits_dict
+
+    @property
+    def normalized_counts(self):
+        return self._normalized_counts_df
     
     @property
     def labels(self):
