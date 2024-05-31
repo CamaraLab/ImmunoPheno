@@ -679,8 +679,8 @@ def test_property_ImmunoPhenoData():
     ipd._cell_labels = pd.DataFrame()
 
     # Act
-    output_classified = ipd.classified_filt
-    output_z_scores = ipd.z_scores
+    output_classified = ipd._classified_filt_df
+    output_z_scores = ipd._z_scores_df
     output_norm_counts = ipd.normalized_counts
     output_protein = ipd.protein
     output_norm_labels = ipd.labels

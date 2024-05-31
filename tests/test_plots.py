@@ -13,8 +13,8 @@ from src.immunopheno.plots import (
 def test_antibody_correlation(mocker):
     # Arrange
     mock_IPD = mocker.Mock()
-    mock_IPD.classified_filt = pd.DataFrame()
-    mock_IPD.z_scores = pd.DataFrame()
+    mock_IPD._classified_filt_df = pd.DataFrame()
+    mock_IPD._z_scores_df = pd.DataFrame()
 
     mock_cluster = mocker.patch("src.immunopheno.plots.sns.clustermap")
 
