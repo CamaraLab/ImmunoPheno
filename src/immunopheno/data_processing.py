@@ -1459,13 +1459,11 @@ class ImmunoPhenoData:
         self._spreadsheet = spreadsheet
         self._cell_labels = cell_labels
         self._scanpy = scanpy
-        self._label_certainties = None
 
         # Temp values (for resetting index)
         self._temp_protein = None
         self._temp_gene = None
         self._temp_labels = None
-        self._temp_certainties = None
 
         # Calculated values
         self._all_fits = None
@@ -1644,14 +1642,6 @@ class ImmunoPhenoData:
     # def raw_cell_labels(self, value):
     #     self._cell_labels = value
 
-    @property
-    def label_certainties(self):
-        return self._label_certainties
-
-    @label_certainties.setter
-    def label_certainties(self, value):
-        self._label_certainties = value
-
     def reset_index(self):
         """
         Resets all dataframe values using original index
@@ -1660,7 +1650,6 @@ class ImmunoPhenoData:
         self._protein_matrix = self._temp_protein
         self._gene_matrix = self._temp_gene
         self._cell_labels = self._temp_labels
-        self._label_certainties = self._temp_certainties
 
     def convert_labels(self):
         # First, check that the raw cell types table exists
@@ -1710,7 +1699,6 @@ class ImmunoPhenoData:
         self._protein_matrix = self._protein_matrix.loc[index]
         self._gene_matrix = self._gene_matrix.loc[index]
         self._cell_labels = self._cell_labels.loc[index]
-        self._label_certainties = self._label_certainties.loc[index]
 
     def remove_antibody(self,
                         antibody: str):
