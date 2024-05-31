@@ -16,7 +16,7 @@ def plot_antibody_correlation(IPD):
         seaborn clustermap for a heatmap of the antibodies
     """
     # Calculate correlation dataframe
-    corr_df = _correlation_ab(IPD.classified_filt, IPD.z_scores)
+    corr_df = _correlation_ab(IPD._classified_filt_df, IPD._z_scores_df)
     g = sns.clustermap(corr_df, vmin=-1, vmax=1, cmap='BrBG')
     g.ax_cbar.set_position((1, .2, .03, .4))
  
