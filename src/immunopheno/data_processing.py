@@ -1460,7 +1460,7 @@ class ImmunoPhenoData:
         self._cell_labels = cell_labels
         self._scanpy = scanpy
 
-        # Temp values (for resetting index)
+        # Temp values
         self._temp_protein = None
         self._temp_gene = None
         self._temp_labels = None
@@ -1630,27 +1630,6 @@ class ImmunoPhenoData:
         else:
             print("No common rows found between old and new labels. No updates will be made to the old labels.")
 
-    # @property
-    # def norm_cell_labels(self):
-    #     return self._cell_labels_filt_df
-
-    # @property
-    # def raw_cell_labels(self):
-    #     return self._cell_labels
-
-    # @raw_cell_labels.setter
-    # def raw_cell_labels(self, value):
-    #     self._cell_labels = value
-
-    def reset_index(self):
-        """
-        Resets all dataframe values using original index
-
-        """
-        self._protein_matrix = self._temp_protein
-        self._gene_matrix = self._temp_gene
-        self._cell_labels = self._temp_labels
-
     def convert_labels(self):
         # First, check that the raw cell types table exists
         if self._cell_labels is not None and isinstance(self._cell_labels, pd.DataFrame):
@@ -1683,22 +1662,6 @@ class ImmunoPhenoData:
                 raise Exception("Table does not contain 'labels' column")
         else:
             raise Exception("No cell labels found. Please provide a table with a 'labels' column.")
-        
-    def update_index(self,
-                     index: list):
-        """
-        Updates the index of cells for each dataframe
-        in an ImmunoPhenoData object
-
-        Parameters:
-            index (list/pandas.core.indexes.base.Index): list of cell names
-        """
-        # Before updating the index, reset it back to its original
-        self.reset_index()
-
-        self._protein_matrix = self._protein_matrix.loc[index]
-        self._gene_matrix = self._gene_matrix.loc[index]
-        self._cell_labels = self._cell_labels.loc[index]
 
     def remove_antibody(self,
                         antibody: str):
