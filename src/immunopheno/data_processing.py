@@ -1426,23 +1426,24 @@ class BackgroundZScoreError(ImmunoPhenoError):
     """Provided default z score value is greater than 0"""
 
 class ImmunoPhenoData:
-    """
-    A class to hold single-cell data (CITE-Seq, etc) and Flow Cytometry data.
+    """A class to hold single-cell data (CITE-Seq, etc) and cytometry data.
+    
     Performs fitting of gaussian/negative binomial mixture models and
-    normalization to antibodies present in a protein dataset.
+    normalization to antibodies present in a protein dataset. 
 
-    Parameters:
-        protein_matrix (str or dataframe): file path or dataframe to ADT count matrix
-            Where: Row index (cells) x column (antibodies)
-        gene_matrix (str): file path or dataframe to UMI count matrix
-            Where: Row index (cells) x column (genes)
-        cell_labels (pd.DataFrame): file path or dataframe
-            Where: Row index (cells) x column (cell type such as Cell Ontology ID)
+    Args:
+        protein_matrix (str | pd.Dataframe): file path or dataframe to ADT count matrix. 
+            Format: Row (cells) x column (proteins/antibodies).
+        gene_matrix (str | pd.DataFrame): file path or dataframe to UMI count matrix.
+            Format: Row (cells) x column (genes).
+        cell_labels (str | pd.DataFrame): file path or dataframe to cell type labels. 
+            Format: Row (cells) x column (cell type such as Cell Ontology ID). The column
+            name should be called "labels". 
         spreadsheet (str): name of csv file containing a spreadsheet with
-            information about the experiment and antibodies. Used for uploading to a database
-        scanpy (AnnData object): scanpy anndata object used to load in protein and gene data
-        scanpy_labels (str): name of the field inside a scanpy object with the cell labels
-            Where: scanpy is an AnnData object containing an 'obs' field
+            information about the experiment and antibodies. Used for uploading data to the database.
+        scanpy (anndata.AnnData): scanpy AnnData object used to load in protein and gene data.
+        scanpy_labels (str): location of cell labels inside a scanpy object.
+            Format: scanpy is an AnnData object containing an 'obs' field
                 Ex: AnnData.obs['scanpy_labels']
     """
     def __init__(self,
@@ -1553,7 +1554,17 @@ class ImmunoPhenoData:
             # Also create a dictionary of antibodies with their IDs for name conversion
             self._ab_ids_dict = _target_ab_dict(_read_antibodies(spreadsheet))
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: pd.Index | list):
+        """Allows instances of ImmunoPhenoData to use the indexing operator.
+
+        Args:
+            index (pd.Index | list): list or pandas index of cell names. This will return
+                a new ImmunoPhenoData object containing only those cell names in 
+                all dataframes of the object. 
+
+        Returns:
+            ImmunoPhenoData: contains modified dataframes based on provided rows/cells names
+        """
         if isinstance(index, list):
             index = pd.Index(index)
 
@@ -1571,35 +1582,82 @@ class ImmunoPhenoData:
         return new_instance
 
     @property
-    def protein(self):
+    def protein(self) -> pd.DataFrame:
+        """Get or set the current protein dataframe in the object.
+        
+        Setting a new protein dataframe requires the format to have rows (cells) and
+        columns (proteins/antibodies). 
+
+        Returns:
+            pd.DataFrame: dataframe containing protein data.
+        """
         return self._protein_matrix
 
     @protein.setter
-    def protein(self, value):
+    def protein(self, value: pd.DataFrame) -> None:
         self._protein_matrix = value
 
     @property
-    def rna(self):
+    def rna(self) -> pd.DataFrame:
+        """Get or set the current gene/rna dataframe in the object.
+        
+        Setting a new RNA dataframe requires the format to have rows (cells) and
+        columns (genes).
+
+        Returns:
+            pd.DataFrame: dataframe containing RNA data.
+        """
         return self._gene_matrix
 
     @rna.setter
-    def rna(self, value):
+    def rna(self, value: pd.DataFrame) -> None:
         self._gene_matrix = value
     
     @property
-    def fits(self):
+    def fits(self) -> dict:
+        """Get the mixture model fits for each antibody in the protein dataframe.
+
+        Each mixture model fit will be stored in a dictionary, where the key
+        is the name of the antibody. 
+
+        Returns:
+            dict: key-value pairs represent an antibody name with a
+            nested dictionary containing the respective mixture model fits. 
+            Fits are ranked by the lowest AIC.
+        """
         return self._all_fits_dict
 
     @property
-    def normalized_counts(self):
+    def normalized_counts(self) -> pd.DataFrame:
+        """Get the normalized protein dataframe in the object.
+
+        This dataframe will only be present if normalize_all_antibodies 
+        has been called. The format will have rows (cells) and columns (proteins/antibodies).
+        Note that some rows may be missing/filtered out from the normalization step.
+
+        Returns:
+            pd.DataFrame: normalized protein counts for each antibody. 
+        """
         return self._normalized_counts_df
     
     @property
-    def labels(self):
+    def labels(self) -> pd.DataFrame:
+        """Get or set the current cell labels for all normalized cells in the object.
+
+        This dataframe will contain rows (cells) and two columns: "labels" and "celltypes". 
+        All values in the "labels" column will follow the EMBL-EBI Cell Ontology ID format.
+        A common name for each value in "labels" will be in the "celltypes" column.
+
+        Setting a new cell labels table will only update rows (cells) that are shared 
+        between the existing and new table. 
+
+        Returns:
+            pd.DataFrame: dataframe containing two columns: "labels" and "celltypes". 
+        """
         return self._cell_labels_filt_df
     
     @labels.setter
-    def labels(self, value: pd.DataFrame):
+    def labels(self, value: pd.DataFrame) -> None:
         self._cell_labels_filt_df = value #  Change the norm_cell_labels
         # If the cells in 'value' are found in the original table, update those rows too
         common_indices = self._cell_labels.index.intersection(self._cell_labels_filt_df.index)
@@ -1622,7 +1680,16 @@ class ImmunoPhenoData:
         else:
             print("No common rows found between old and new labels. No updates will be made to the old labels.")
 
-    def convert_labels(self):
+    def convert_labels(self) -> None:
+        """Convert all cell ontology IDs to a common name.
+
+        Requires all values in the "labels" column of the cell labels dataframe to
+        follow the cell ontology format of CL:XXXXXXX or CL_XXXXXXX, 
+        where an "X" is a numeric value.
+
+        Returns:
+            None. Modifies the cell labels dataframe in-place.
+        """
         # First, check that the raw cell types table exists
         if self._cell_labels is not None and isinstance(self._cell_labels, pd.DataFrame):
             # Check if the "labels" column exists
@@ -1655,14 +1722,18 @@ class ImmunoPhenoData:
         else:
             raise Exception("No cell labels found. Please provide a table with a 'labels' column.")
 
-    def remove_antibody(self,
-                        antibody: str):
-        """
-        Removes an antibody from protein data and mixture model fits (if present)
+    def remove_antibody(self, antibody: str) -> None:
+        """Removes an antibody from the protein data and mixture model fits
 
-        Parameters:
+        Removes all values for an antibody from the protein dataframe in-place. If
+        fit_antibody or fit_all_antibodies has been called, it will also remove 
+        the mixture model fits for that antibody.
+
+        Args:
             antibody (str): name of antibody to be removed
 
+        Returns:
+            None. Modifies the protein and fits data in-place.
         """
         # CHECK: Does this antibody exist in the protein data?
         if isinstance(antibody, str):
@@ -1682,14 +1753,15 @@ class ImmunoPhenoData:
 
     def select_mixture_model(self,
                              antibody: str,
-                             mixture: int):
-        """
-        Overrides the best mixture model fit for an antibody
+                             mixture: int) -> None:
+        """Overrides the best mixture model fit for an antibody
 
-        Parameters:
+        Args:
             antibody (str): name of antibody to modify best mixture model fit
             mixture (int): number of mixture components for a given fit to override
 
+        Returns:
+            None. Modifies mixture model rank in-place.
         """
         # CHECK: is mixture between 1 and 3
         if (not 1 <= mixture <= 3):
@@ -1718,20 +1790,23 @@ class ImmunoPhenoData:
             raise AntibodyLookupError(f"{antibody} fits cannot be found.")
 
     def fit_antibody(self,
-                     input: list,
+                     input: list | str,
                      ab_name: str = None,
                      transform_type: str = None,
                      transform_scale: int = 1,
                      model: str = 'gaussian',
                      plot: bool = False,
                      **kwargs) -> dict:
-        """
-        Fits a mixture model to an antibody and returns its optimal parameters
-        Can be called after fit_all_antibodies to replace a fit for a particular
-        antibody or to fit an antibody one by one.
+        """Fits a mixture model to an antibody and returns its optimal parameters.
 
-        Parameters:
-            input (list/str): raw values from protein data or antibody name
+        This function can be called to either initially fit a single antibody
+        with a mixture model or replace an existing fit. This function can be called
+        after fit_all_antibodies has been called to replace individual fits.
+
+        Args:
+            input (list | str): raw values from protein data or antibody name 
+            ab_name (str, optional): name of antibody. Ignore if calling 
+                fit_antibody by supplying the antibody name in the "input" parameter.
             transform_type (str): type of transformation. "log" or "arcsinh"
             transform_scale (int): multiplier applied during transformation
             model (str): type of model to fit. "gaussian" or "nb"
@@ -1739,7 +1814,7 @@ class ImmunoPhenoData:
             **kwargs: initial arguments for sklearn's GaussianMixture (optional)
 
         Returns:
-            gauss_params/nb_params (dict): results from optimization
+            dict: results from optimization as either gauss_params/nb_params.
         """
 
         # Checking parameters
@@ -1838,7 +1913,7 @@ class ImmunoPhenoData:
                            transform_scale: int = 1,
                            model: str = 'gaussian',
                            plot: bool = False,
-                           **kwargs) -> list:
+                           **kwargs) -> None:
         """
         Applies fit_antibody to each antibody in the protein count matrix
 
