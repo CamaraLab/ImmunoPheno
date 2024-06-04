@@ -717,19 +717,23 @@ class Mapping:
         
         codex_subset = self.stvea.codex_protein.loc[:, common_protein]
         cite_subset = self.stvea.cite_protein.loc[:, common_protein]
-    
+
+        # After subsetting by common proteins, some rows can have all 0s. Filter again
+        codex_subset_filtered = remove_all_zeros_or_na(codex_subset)
+        cite_subset_filtered = remove_all_zeros_or_na(cite_subset)
+
         if self.stvea.cite_latent.shape != (0, 0):
             cite_latent = self.stvea.cite_latent
         else:
             cite_latent = self.stvea.cite_protein
                       
-        chunk = codex_subset.loc[chunk_idx]
+        chunk = codex_subset_filtered.loc[chunk_idx]
         print("Processing chunk of size: ", len(chunk_idx))
         
         # construct common CCA space for the chunk
-        cca_data = Mapping.run_cca(cite_subset.T, chunk.T, True, num_cc=len(common_protein) - 1)
+        cca_data = Mapping.run_cca(cite_subset_filtered.T, chunk.T, True, num_cc=len(common_protein) - 1)
 
-        cite_count = cite_subset.shape[0]
+        cite_count = cite_subset_filtered.shape[0]
 
         neighbors = Mapping.find_nn_rna(ref_emb=cca_data.iloc[:cite_count, :],
                                         query_emb=cca_data.iloc[cite_count:, :],
@@ -739,12 +743,12 @@ class Mapping:
 
         anchors = Mapping.find_anchor_pairs(neighbors, k_find_anchor)
 
-        anchors = Mapping.filter_anchors(cite_subset, chunk, anchors, k_filter_anchor, nn_option=nn_option)
+        anchors = Mapping.filter_anchors(cite_subset_filtered, chunk, anchors, k_filter_anchor, nn_option=nn_option)
 
         anchors = Mapping.score_anchors(neighbors, anchors, len(neighbors["nn_rr"]["nn_idx"]),
                                         len(neighbors["nn_qq"]["nn_idx"]), k_score_anchor)
 
-        integration_matrix = Mapping.find_integration_matrix(cite_subset, chunk, neighbors, anchors)
+        integration_matrix = Mapping.find_integration_matrix(cite_subset_filtered, chunk, neighbors, anchors)
 
         weights = Mapping.find_weights(neighbors, anchors, chunk, k_find_weights, nn_option=nn_option)
 
@@ -799,11 +803,15 @@ class Mapping:
             # select common protein columns
             codex_subset = self.stvea.codex_protein.loc[:, common_protein]
             cite_subset = self.stvea.cite_protein.loc[:, common_protein]
+
+            # After subsetting by common proteins, some rows can have all 0s. Filter again
+            codex_subset_filtered = remove_all_zeros_or_na(codex_subset)
+            cite_subset_filtered = remove_all_zeros_or_na(cite_subset)
     
             # construct common CCA space.
-            cca_data = Mapping.run_cca(cite_subset.T, codex_subset.T, True, num_cc=len(common_protein) - 1)
+            cca_data = Mapping.run_cca(cite_subset_filtered.T, codex_subset_filtered.T, True, num_cc=len(common_protein) - 1)
     
-            cite_count = cite_subset.shape[0]
+            cite_count = cite_subset_filtered.shape[0]
             # find the nearest neighbors
             # return a dict {'nn_rr': nn_rr, 'nn_rq': nn_rq, 'nn_qr': nn_qr, 'nn_qq': nn_qq,
             #                 'cellsr': ref_emb.index.values, 'cellsq': query_emb.index.values}
@@ -821,16 +829,16 @@ class Mapping:
     
             anchors = Mapping.find_anchor_pairs(neighbors, k_find_anchor)
     
-            anchors = Mapping.filter_anchors(cite_subset, codex_subset, anchors, k_filter_anchor, nn_option=nn_option)
+            anchors = Mapping.filter_anchors(cite_subset_filtered, codex_subset_filtered, anchors, k_filter_anchor, nn_option=nn_option)
     
             anchors = Mapping.score_anchors(neighbors, anchors, len(neighbors["nn_rr"]["nn_idx"]),
                                             len(neighbors["nn_qq"]["nn_idx"]), k_score_anchor)
     
-            integration_matrix = Mapping.find_integration_matrix(cite_subset, codex_subset, neighbors, anchors)
+            integration_matrix = Mapping.find_integration_matrix(cite_subset_filtered, codex_subset_filtered, neighbors, anchors)
     
-            weights = Mapping.find_weights(neighbors, anchors, codex_subset, k_find_weights, nn_option=nn_option)
+            weights = Mapping.find_weights(neighbors, anchors, codex_subset_filtered, k_find_weights, nn_option=nn_option)
     
-            Mapping.transform_data_matrix(codex_subset, integration_matrix, weights, self.stvea)
+            Mapping.transform_data_matrix(codex_subset_filtered, integration_matrix, weights, self.stvea)
     
             end = time.time()
             print(f"map_codex_to_cite: {round(end - start, 3)}")
@@ -850,9 +858,12 @@ class Mapping:
     
             # Shuffle the index of codex_subset
             codex_subset = self.stvea.codex_protein.loc[:, common_protein]
+
+            # After subsetting by common proteins, some rows can have all 0s. Filter again
+            codex_subset_filtered = remove_all_zeros_or_na(codex_subset)
                               
-            shuffled_index = np.random.permutation(codex_subset.index)
-            codex_subset_shuffled = codex_subset.reindex(shuffled_index)
+            shuffled_index = np.random.permutation(codex_subset_filtered.index)
+            codex_subset_shuffled = codex_subset_filtered.reindex(shuffled_index)
                 
             # Split codex_subset_shuffled into chunks
             chunks = Mapping.dynamic_chunking(codex_subset_shuffled.index, num_chunks)
