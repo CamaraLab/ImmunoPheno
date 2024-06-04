@@ -489,10 +489,12 @@ def impute_dataset_by_type(downsampled_df, rho):
     # combined_imputed_dropped_df = combined_imputed_df.dropna(axis="columns", how="any")
     combined_imputed_dropped_df = keep_calling_filter_imputed(combined_imputed_df, rho=rho)
     
+    # Remove any rows/columns that are all 0s
+    combined_imputed_dropped_filtered_df = remove_all_zeros_or_na(combined_imputed_dropped_df)
+
     # Retrieve all the idCLs again for all the cells
-    combined_imputed_dropped_idCLs = downsampled_df.loc[combined_imputed_dropped_df.index]["idCL"]
-    
-    combined_imputed_df_with_idCL = pd.concat([combined_imputed_dropped_df, combined_imputed_dropped_idCLs], axis=1)
+    combined_imputed_dropped_idCLs = downsampled_df.loc[combined_imputed_dropped_filtered_df.index]["idCL"]
+    combined_imputed_df_with_idCL = pd.concat([combined_imputed_dropped_filtered_df, combined_imputed_dropped_idCLs], axis=1)
 
     # Compare final output with the original output. See what remains, and see whether they were orignally NAs
     final_columns = combined_imputed_df_with_idCL.columns
@@ -1450,13 +1452,21 @@ class ImmunoPhenoDB_Connect:
         convert_idCL_res = requests.post(f"{self.url}/api/convertcelltype", json=convert_idCL)
         idCL_names = convert_idCL_res.json()["results"]     
         labels_df['celltype'] = labels_df['labels'].map(idCL_names)
+
+        # labels_df now contains two columns: 'labels' and 'celltype'
+        # However, some rows may have been filtered out during the run_cca step
+        # Fill in missing rows from the original dataset with "Not Assigned"
+        index_diff = codex_normalized_with_ids.index.difference(labels_df.index)
+        filtered_cells = {'labels': ['Not Assigned'] * len(index_diff), 'celltype': ['Not Assigned'] * len(index_diff)}
+        new_df = pd.DataFrame(filtered_cells, index=index_diff)
+        complete_labels_df = labels_df.append(new_df)
         
         # Before setting norm_cell_types, check if it matches the previous. If not, reset norm_umap field
-        if not (labels_df.equals(IPD_new._cell_labels_filt_df)):
+        if not (complete_labels_df.equals(IPD_new._cell_labels_filt_df)):
             IPD_new._norm_umap = None
-        IPD_new._cell_labels_filt_df = labels_df
+        IPD_new._cell_labels_filt_df = complete_labels_df
         
-        # Add labels to raw cell labels as well. The filtered rows will be marked as "filtered"
+        # Add labels to raw cell labels as well. The filtered rows will be marked as "filtered_by_stvea"
         original_cells_index = IPD_new.protein.index
         merged_df = IPD_new._cell_labels_filt_df.reindex(original_cells_index)
         merged_df = merged_df.fillna("filtered_by_stvea")
