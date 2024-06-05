@@ -1202,7 +1202,7 @@ def _normalize_antibody(fit_results: dict,
                         residual = lin_reg_dict[cell_type].loc[cell_name]['residual']
 
                         if math.isnan(residual) is False:
-                            factor += predicted
+                            factor += residual
                         else:
                             factor += 0
 
@@ -1685,8 +1685,7 @@ class ImmunoPhenoData:
         """Convert all cell ontology IDs to a common name.
 
         Requires all values in the "labels" column of the cell labels dataframe to
-        follow the cell ontology format of CL:XXXXXXX or CL_XXXXXXX, 
-        where "X" is a numeric value.
+        follow the cell ontology format of CL:0000000 or CL_0000000.
 
         Returns:
             None. Modifies the cell labels dataframe in-place.
@@ -1724,14 +1723,14 @@ class ImmunoPhenoData:
             raise Exception("No cell labels found. Please provide a table with a 'labels' column.")
 
     def remove_antibody(self, antibody: str) -> None:
-        """Removes an antibody from all protein data and mixture model fits
+        """Removes an antibody from all protein data and mixture model fits.
 
         Removes all values for an antibody from all protein dataframes in-place. If
         fit_antibody or fit_all_antibodies has been called, it will also remove 
         the mixture model fits for that antibody.
 
         Args:
-            antibody (str): name of antibody to be removed
+            antibody (str): name of antibody to be removed.
 
         Returns:
             None. Modifies all protein dataframes and fits data in-place.
@@ -1769,11 +1768,11 @@ class ImmunoPhenoData:
     def select_mixture_model(self,
                              antibody: str,
                              mixture: int) -> None:
-        """Overrides the best mixture model fit for an antibody
+        """Overrides the best mixture model fit for an antibody.
 
         Args:
-            antibody (str): name of antibody to modify best mixture model fit
-            mixture (int): preferred number of mixture components to override a fit
+            antibody (str): name of antibody to modify best mixture model fit.
+            mixture (int): preferred number of mixture components to override a fit.
 
         Returns:
             None. Modifies mixture model order in-place.
@@ -1929,16 +1928,23 @@ class ImmunoPhenoData:
                            model: str = 'gaussian',
                            plot: bool = False,
                            **kwargs) -> None:
-        """
-        Applies fit_antibody to each antibody in the protein count matrix
+        """Fits all antibodies with a Gaussian or Negative Binomial mixture model.
 
-        Parameters:
-            protein_data (pd.DataFrame): count matrix containing antibodies x cells
+        Fits a Gaussian or Negative Binomial mixture model to all antibodies
+        in the protein dataset. After all antibodies are fit, the output will 
+        display the number of each mixture model fit in the dataset. This includes
+        the names of the antibodies that were fit with a single component model.
+        
+        Args:
             transform_type (str): type of transformation. "log" or "arcsinh"
-            transform_scale (int): multiplier applied during transformation
+            transform_scale (int): multiplier applied during transformation.
             model (str): type of model to fit. "gaussian" or "nb"
             plot (bool): option to plot each model
             **kwargs: initial arguments for sklearn's GaussianMixture (optional)
+        
+        Returns:
+            None. Results will be stored in the class. This is accessible using 
+            the "fits" property.
         """
 
         fit_all_results = []
@@ -1987,22 +1993,35 @@ class ImmunoPhenoData:
                                  bg_expr_threshold: float = 0.15,
                                  bg_cell_z_score: int = 10,
                                  cumulative: bool = False) -> pd.DataFrame:
-        """
-        Normalizes all values in a protein matrix
+        """Normalizes all antibodies in the protein data.
 
-        Parameters:
+        The normalization step uses the fits from the mixture model to remove 
+        background noise from the overall signal expression of an antibody. This will take into
+        account non-specific antibody binding if RNA data is present. If RNA data 
+        is present, the effects of cell size on the background noise will be regressed out
+        for cells not expressing the antibody. Likewise, if cell labels are provided, 
+        the effects of cell types on the background noise for these cells will also be regressed out. 
+        These effects are determined by performing a linear regression using the 
+        total number of mRNA UMI counts as a proxy for cell size.
+
+        Args:
             p_threshold (float): level of significance for testing the association
-                between background antibody expression levels and the total number of
-                mRNA UMIs and the cell type. If p-value is smaller than the threshod,
-                these factors are regressed out
-            sig_expr_threshold (float): cells with a fraction of expressed proteins above
-                the threshold are filtered out
-            bg_expr_threshold (float): cells with a fraction of expressed proteins below
-                the threshold are filtered out
-            bg_cell_z_score (int): average protein expression z-score across cells that
-                express the protein
+                between cell size/type and background noise from linear regression. If 
+                the p-value is smaller than the threshold, these factors are regressed out.
+            sig_expr_threshold (float): cells with a percentage of expressed proteins above
+                this threshold are filtered out.
+            bg_expr_threshold (float): cells with a percentage of expressed proteins below
+                this threshold are filtered out.
+            bg_cell_z_score (int): The number of standard deviations of average protein expression
+                to separate cells that express an antibody from cells that do not express an antibody.
+                A larger value will result in more discrete clusters in the normalized 
+                protein expression space.
             cumulative (bool): flag to indicate whether to return the 
-                cumulative distribution probabilities
+                cumulative distribution probabilities.
+        
+        Returns:
+            None. Results will be stored in the class. This is accessible using 
+            the "normalized_counts" property.
         """
 
         # Check if parameters have changed
