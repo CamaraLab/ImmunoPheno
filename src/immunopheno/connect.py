@@ -1460,6 +1460,9 @@ class ImmunoPhenoDB_Connect:
         filtered_cells = {'labels': ['Not Assigned'] * len(index_diff), 'celltype': ['Not Assigned'] * len(index_diff)}
         new_df = pd.DataFrame(filtered_cells, index=index_diff)
         complete_labels_df = labels_df.append(new_df)
+
+        # Ensure that all NaN values are replaced with "Not Assigned" in the "celltype" column
+        complete_labels_df['celltype'] = complete_labels_df['celltype'].fillna('Not Assigned')
         
         # Before setting norm_cell_types, check if it matches the previous. If not, reset norm_umap field
         if not (complete_labels_df.equals(IPD_new._cell_labels_filt_df)):
