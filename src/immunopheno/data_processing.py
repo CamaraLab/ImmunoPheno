@@ -1563,7 +1563,8 @@ class ImmunoPhenoData:
                 all dataframes of the object. 
 
         Returns:
-            ImmunoPhenoData: contains modified dataframes based on provided rows/cells names
+            ImmunoPhenoData: ImmunoPhenoData object with modified dataframes 
+                based on provided rows/cells names
         """
         if isinstance(index, list):
             index = pd.Index(index)
@@ -1589,7 +1590,7 @@ class ImmunoPhenoData:
         columns (proteins/antibodies). 
 
         Returns:
-            pd.DataFrame: dataframe containing protein data.
+            pd.DataFrame: Dataframe containing protein data.
         """
         return self._protein_matrix
 
@@ -1605,7 +1606,7 @@ class ImmunoPhenoData:
         columns (genes).
 
         Returns:
-            pd.DataFrame: dataframe containing RNA data.
+            pd.DataFrame: Dataframe containing RNA data.
         """
         return self._gene_matrix
 
@@ -1621,7 +1622,7 @@ class ImmunoPhenoData:
         is the name of the antibody. 
 
         Returns:
-            dict: key-value pairs represent an antibody name with a
+            dict: Key-value pairs represent an antibody name with a
             nested dictionary containing the respective mixture model fits. 
             Fits are ranked by the lowest AIC.
         """
@@ -1636,7 +1637,7 @@ class ImmunoPhenoData:
         Note that some rows may be missing/filtered out from the normalization step.
 
         Returns:
-            pd.DataFrame: normalized protein counts for each antibody. 
+            pd.DataFrame: Normalized protein counts for each antibody. 
         """
         return self._normalized_counts_df
     
@@ -1652,7 +1653,7 @@ class ImmunoPhenoData:
         between the existing and new table. 
 
         Returns:
-            pd.DataFrame: dataframe containing two columns: "labels" and "celltypes". 
+            pd.DataFrame: Dataframe containing two columns: "labels" and "celltypes". 
         """
         return self._cell_labels_filt_df
     
@@ -1685,7 +1686,7 @@ class ImmunoPhenoData:
 
         Requires all values in the "labels" column of the cell labels dataframe to
         follow the cell ontology format of CL:XXXXXXX or CL_XXXXXXX, 
-        where an "X" is a numeric value.
+        where "X" is a numeric value.
 
         Returns:
             None. Modifies the cell labels dataframe in-place.
@@ -1723,9 +1724,9 @@ class ImmunoPhenoData:
             raise Exception("No cell labels found. Please provide a table with a 'labels' column.")
 
     def remove_antibody(self, antibody: str) -> None:
-        """Removes an antibody from the protein data and mixture model fits
+        """Removes an antibody from all protein data and mixture model fits
 
-        Removes all values for an antibody from the protein dataframe in-place. If
+        Removes all values for an antibody from all protein dataframes in-place. If
         fit_antibody or fit_all_antibodies has been called, it will also remove 
         the mixture model fits for that antibody.
 
@@ -1733,18 +1734,26 @@ class ImmunoPhenoData:
             antibody (str): name of antibody to be removed
 
         Returns:
-            None. Modifies the protein and fits data in-place.
+            None. Modifies all protein dataframes and fits data in-place.
         """
-        # CHECK: Does this antibody exist in the protein data?
-        if isinstance(antibody, str):
-            try:
-                # Drop column from protein data
-                self._protein_matrix.drop(antibody, axis=1, inplace=True)
-                print(f"Removed {antibody} from protein data.")
-            except:
-                raise AntibodyLookupError(f"'{antibody}' not found in protein data.")
-        else:
+        if not isinstance(antibody, str):
             raise AntibodyLookupError("Antibody must be a string")
+        
+        column_found = False
+
+        # Iterate through all attributes of the class
+        for attr_name, attr_value in self.__dict__.items():
+            # Check if the attribute is a DataFrame
+            if isinstance(attr_value, pd.DataFrame):
+                # Try to drop the column if it exists
+                if antibody in attr_value.columns:
+                    attr_value.drop(antibody, axis=1, inplace=True)
+                    column_found = True
+
+        if not column_found:
+            raise AntibodyLookupError(f"'{antibody}' not found in protein data.")
+        else:
+            print(f"Removed {antibody} from object.")
 
         # CHECK: Does this antibody have a fit?
         if self._all_fits_dict != None and antibody in self._all_fits_dict:
@@ -1758,10 +1767,10 @@ class ImmunoPhenoData:
 
         Args:
             antibody (str): name of antibody to modify best mixture model fit
-            mixture (int): number of mixture components for a given fit to override
+            mixture (int): preferred number of mixture components to override a fit
 
         Returns:
-            None. Modifies mixture model rank in-place.
+            None. Modifies mixture model order in-place.
         """
         # CHECK: is mixture between 1 and 3
         if (not 1 <= mixture <= 3):
@@ -1801,7 +1810,7 @@ class ImmunoPhenoData:
 
         This function can be called to either initially fit a single antibody
         with a mixture model or replace an existing fit. This function can be called
-        after fit_all_antibodies has been called to replace individual fits.
+        after fit_all_antibodies has been called to modify individual fits.
 
         Args:
             input (list | str): raw values from protein data or antibody name 
@@ -1814,7 +1823,7 @@ class ImmunoPhenoData:
             **kwargs: initial arguments for sklearn's GaussianMixture (optional)
 
         Returns:
-            dict: results from optimization as either gauss_params/nb_params.
+            dict: Results from optimization as either gauss_params/nb_params.
         """
 
         # Checking parameters
