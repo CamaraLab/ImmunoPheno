@@ -1757,6 +1757,10 @@ class ImmunoPhenoData:
         else:
             print(f"Removed {antibody} from object.")
 
+        # Reset the regular and normalized UMAPs after removing an antibody from the protein dataset
+        self._raw_umap = None
+        self._norm_umap = None
+
         # CHECK: Does this antibody have a fit?
         if self._all_fits_dict != None and antibody in self._all_fits_dict:
             self._all_fits_dict.pop(antibody)
