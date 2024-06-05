@@ -1747,7 +1747,9 @@ class ImmunoPhenoData:
             if isinstance(attr_value, pd.DataFrame):
                 # Try to drop the column if it exists
                 if antibody in attr_value.columns:
-                    attr_value.drop(antibody, axis=1, inplace=True)
+                    attr_value_copy = attr_value.copy()  # Create a copy to avoid SettingWithCopyWarning
+                    attr_value_copy.drop(antibody, axis=1, inplace=True)
+                    setattr(self, attr_name, attr_value_copy)
                     column_found = True
 
         if not column_found:
