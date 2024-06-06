@@ -32,17 +32,17 @@ def _update_cl_owl():
     owl_link = response.json()['config']['versionIri']
     return owl_link
 
-def graph_pos(G):
+def _graph_pos(G):
     result = Graph(G, node_layout='dot')
     plt.close()
     return result.node_positions
 
-def find_leaf_nodes(graph, node):
+def _find_leaf_nodes(graph, node):
     descendants = nx.descendants(graph, node)
     leaf_nodes = [n for n in descendants if graph.out_degree(n) == 0]
     return leaf_nodes
 
-def subgraph(G: nx.DiGraph, 
+def _subgraph(G: nx.DiGraph, 
              nodes: list, 
              root: str ='CL:0000000')-> nx.DiGraph:
     """
@@ -116,7 +116,7 @@ def subgraph(G: nx.DiGraph,
 
     return subgraph
 
-def find_subgraph_from_root(G: nx.DiGraph, 
+def _find_subgraph_from_root(G: nx.DiGraph, 
                             root: str, 
                             leaf_nodes: list):
     all_paths_from_root = []
@@ -136,9 +136,9 @@ def find_subgraph_from_root(G: nx.DiGraph,
     subgraph = nx.subgraph(G, unique_visited_idCLs)
     return subgraph
     
-def plotly_subgraph(G, nodes_to_highlight, hover_text):
+def _plotly_subgraph(G, nodes_to_highlight, hover_text):
     # Get positions using a layout algorithm from netgraph 'dot'
-    pos = graph_pos(G)
+    pos = _graph_pos(G)
     
     # Extract node coordinates for Plotly
     node_x = [pos[node][0] for node in G.nodes]
@@ -208,7 +208,17 @@ def plotly_subgraph(G, nodes_to_highlight, hover_text):
     # Show the plot
     return fig
 
-def convert_idCL_readable(idCL:str):
+def _convert_idCL_readable(idCL:str) -> str:
+    """
+    Converts a cell ontology id (CL:XXXXXXX) into a readable cell type name
+
+    Parameters:
+        idCL (str): cell ontology ID
+
+    Returns:
+        cellType (str): readable cell type name
+        
+    """
     idCL_params = {
         'q': idCL,
         'exact': 'true',
@@ -221,12 +231,13 @@ def convert_idCL_readable(idCL:str):
     try:
         res = requests.get("https://www.ebi.ac.uk/ols4/api/search", params=idCL_params)
         res_JSON = res.json()
-        cellType = res_JSON['response']['docs'][0]['label']    
-        return cellType
+        cellType = res_JSON['response']['docs'][0]['label']
     except:
-        return ""
+        cellType = idCL
+    
+    return cellType
 
-def convert_ab_readable(ab_id:str):
+def _convert_ab_readable(ab_id:str):
     try:
         res = requests.get("http://www.scicrunch.org" + "/resolver/" + ab_id + ".json")
         res_JSON = res.json()
@@ -237,10 +248,10 @@ def convert_ab_readable(ab_id:str):
     except:
         return ""
 
-def plot_antibodies_graph(idCL: str,
+def _plot_antibodies_graph(idCL: str,
                           getAbs_df: pd.DataFrame,
                           plot_df: pd.DataFrame) -> go.Figure():
-    idCL_readable = convert_idCL_readable(idCL)
+    idCL_readable = _convert_idCL_readable(idCL)
     if idCL_readable == "":
         title = idCL
     else:
@@ -283,10 +294,10 @@ def plot_antibodies_graph(idCL: str,
 
     return fig
 
-def plot_celltypes_graph(ab_id: str,
+def _plot_celltypes_graph(ab_id: str,
                          getct_df: pd.DataFrame,
                          plot_df: pd.DataFrame) -> go.Figure():
-    ab_readable = convert_ab_readable(ab_id)
+    ab_readable = _convert_ab_readable(ab_id)
     if ab_readable == "":
         title = ab_id
     else:
@@ -329,7 +340,7 @@ def plot_celltypes_graph(ab_id: str,
     return fig
 
 # Functions used for run_stvea
-def remove_all_zeros_or_na(protein_df):
+def _remove_all_zeros_or_na(protein_df):
     # Check if any row in the DataFrame has all NAs or all zeros
     rows_to_exclude = protein_df.apply(lambda row: all(row.isna() | (row == 0)), axis=1)
     
@@ -345,7 +356,7 @@ def remove_all_zeros_or_na(protein_df):
     # Display the modified DataFrame
     return filtered_df
 
-def filter_imputed(imputed_df_with_na, rho):
+def _filter_imputed(imputed_df_with_na, rho):
     # First check if dataframe has any NAs to start with
     has_na = imputed_df_with_na.isna().any().any()
     if not has_na:
@@ -428,7 +439,7 @@ def filter_imputed(imputed_df_with_na, rho):
             
     return filtered_imputed
 
-def keep_calling_filter_imputed(original_imputed_df, rho):
+def _keep_calling_filter_imputed(original_imputed_df, rho):
     # Empty dataframe to hold results & constantly update
     modified_imputed_df = pd.DataFrame()
     
@@ -438,7 +449,7 @@ def keep_calling_filter_imputed(original_imputed_df, rho):
     # Keep looping until no NAs remain in the dataframe
     while still_has_NA:
         # Call filter_imputed and get the modified imputed table
-        modified_imputed_df = filter_imputed(original_imputed_df, rho=rho)
+        modified_imputed_df = _filter_imputed(original_imputed_df, rho=rho)
         
         # Check if the current modified_imputed_df has any NAs remaining
         if not (modified_imputed_df.isna().any().any()):
@@ -451,7 +462,7 @@ def keep_calling_filter_imputed(original_imputed_df, rho):
     # Return the final modified_idCLs
     return modified_imputed_df
 
-def impute_dataset_by_type(downsampled_df, rho):
+def _impute_dataset_by_type(downsampled_df, rho):
     # Find all unique idCLs in the table
     unique_idCLs = list(set(downsampled_df['idCL']))
 
@@ -487,10 +498,10 @@ def impute_dataset_by_type(downsampled_df, rho):
 
     # For antibodies that still have NAs after imputation, repeatedly filter them out based on row/column heuristic
     # combined_imputed_dropped_df = combined_imputed_df.dropna(axis="columns", how="any")
-    combined_imputed_dropped_df = keep_calling_filter_imputed(combined_imputed_df, rho=rho)
+    combined_imputed_dropped_df = _keep_calling_filter_imputed(combined_imputed_df, rho=rho)
     
     # Remove any rows/columns that are all 0s
-    combined_imputed_dropped_filtered_df = remove_all_zeros_or_na(combined_imputed_dropped_df)
+    combined_imputed_dropped_filtered_df = _remove_all_zeros_or_na(combined_imputed_dropped_df)
 
     # Retrieve all the idCLs again for all the cells
     combined_imputed_dropped_idCLs = downsampled_df.loc[combined_imputed_dropped_filtered_df.index]["idCL"]
@@ -515,36 +526,7 @@ def impute_dataset_by_type(downsampled_df, rho):
     
     return combined_imputed_df_with_idCL
 
-def convert_idCL_readable(idCL:str) -> str:
-    """
-    Converts a cell ontology id (CL:XXXXXXX) into a readable cell type name
-
-    Parameters:
-        idCL (str): cell ontology ID
-
-    Returns:
-        cellType (str): readable cell type name
-        
-    """
-    idCL_params = {
-        'q': idCL,
-        'exact': 'true',
-        'ontology': 'cl',
-        'fieldList': 'label',
-        'rows': 1,
-        'start': 0
-    }
-
-    try:
-        res = requests.get("https://www.ebi.ac.uk/ols4/api/search", params=idCL_params)
-        res_JSON = res.json()
-        cellType = res_JSON['response']['docs'][0]['label']
-    except:
-        cellType = idCL
-    
-    return cellType
-
-def ebi_idCL_map(labels_df: pd.DataFrame) -> dict:
+def _ebi_idCL_map(labels_df: pd.DataFrame) -> dict:
     """
     Converts a list of cell ontology IDs into readable cell type names
     as a dictionary
@@ -561,12 +543,12 @@ def ebi_idCL_map(labels_df: pd.DataFrame) -> dict:
     idCLs = set(labels_df["labels"])
     
     for idCL in idCLs:
-        idCL_map[idCL] = convert_idCL_readable(idCL)
+        idCL_map[idCL] = _convert_idCL_readable(idCL)
     
     return idCL_map
 
 # Functions used for filter_labels
-def downsample(entire_reference_table: pd.DataFrame,
+def _downsample(entire_reference_table: pd.DataFrame,
                downsample_size: int = 10000,
                size: int = 50) -> pd.DataFrame:
     """
@@ -659,7 +641,7 @@ def downsample(entire_reference_table: pd.DataFrame,
         else:
             return entire_reference_table.loc[pd.Index(cells_to_keep)]
 
-def pearson_correlation_adjaceny_matrix(pairwise_pearson_correlation_distances):
+def _pearson_correlation_adjaceny_matrix(pairwise_pearson_correlation_distances):
     # Find the median correlation distance in the entire distance matrix
     median = pairwise_pearson_correlation_distances.stack().median()
     
@@ -671,7 +653,7 @@ def pearson_correlation_adjaceny_matrix(pairwise_pearson_correlation_distances):
     adjacency_matrix = filtered_bool_mask.astype(int)
     return adjacency_matrix
 
-def fast_cell_label_graph(adj_mat):
+def _fast_cell_label_graph(adj_mat):
     # Convert adjacency matrix to sparse and create graph
     G = nx.from_scipy_sparse_array(scipy.sparse.csr_matrix(adj_mat))
 
@@ -684,7 +666,7 @@ def fast_cell_label_graph(adj_mat):
     return G
 
 #   Part 1 Filtering
-def run_fisher_exact_test(G, celltype_of_interest):
+def _run_fisher_exact_test(G, celltype_of_interest):
     # Initialize counts for each quadrant of the contingency table
     quadrant1_count = 0  # Both nodes do not have "celltype"
     quadrant2_count = 0  # Both nodes have "celltype"
@@ -716,12 +698,12 @@ def run_fisher_exact_test(G, celltype_of_interest):
     p_value = scipy.stats.fisher_exact(contingency_table)
     return p_value[1] 
 
-def ab_id_dict_from_df(cell_labels_df, idCL_column="labels", celltype_column="celltype"):
+def _ab_id_dict_from_df(cell_labels_df, idCL_column="labels", celltype_column="celltype"):
     unique_pairs_df = cell_labels_df.drop_duplicates()
     result_dict = dict(zip(unique_pairs_df[idCL_column], unique_pairs_df[celltype_column]))
     return result_dict
 
-def compare_idCL(G, cl1, cl2):
+def _compare_idCL(G, cl1, cl2):
     # Make sure graph is undirected
     G_undirected = G.to_undirected()
     
@@ -730,7 +712,7 @@ def compare_idCL(G, cl1, cl2):
     return distance
 
 #   Part 2 Filtering
-def part2_filter(owl_graph, downsample_graph, idCLs, cell_labels_df, p_threshold=0.05, epsilon=4) -> list:
+def _part2_filter(owl_graph, downsample_graph, idCLs, cell_labels_df, p_threshold=0.05, epsilon=4) -> list:
     """
     This function needs to take in 2 different graphs
     1. OWL graph: UNDIRECTED Original graph containing all cell type relationships. Used to calculate distances between nodes
@@ -747,7 +729,7 @@ def part2_filter(owl_graph, downsample_graph, idCLs, cell_labels_df, p_threshold
     """   
     # For finding distances between two cell type nodes, use an undirected OWL graph which only contains CL nodes
     # Create a mapping dictionary to quickly find the celltype name for an ID
-    ab_lookup_dict = ab_id_dict_from_df(cell_labels_df)
+    ab_lookup_dict = _ab_id_dict_from_df(cell_labels_df)
 
     # Return the modified list of idCLs at the end
     modified_idCLs = idCLs.copy()
@@ -755,7 +737,7 @@ def part2_filter(owl_graph, downsample_graph, idCLs, cell_labels_df, p_threshold
     # Begin going through every possible pair of cell types
     for i in range(len(idCLs)):
         for j in range(i+1, len(idCLs)):
-            distance_between_nodes = compare_idCL(owl_graph, idCLs[i], idCLs[j])
+            distance_between_nodes = _compare_idCL(owl_graph, idCLs[i], idCLs[j])
 
             # If the distance between two nodes (cell types) is <=2 , create a NN graph
             if distance_between_nodes <= 2:
@@ -770,7 +752,7 @@ def part2_filter(owl_graph, downsample_graph, idCLs, cell_labels_df, p_threshold
 
                 # Now with this downsampled subgraph, we perform a fisher's test with a contingency table
                 # The first idCL or "idCLs[i]" will be the "target" one
-                p_value = run_fisher_exact_test(downsample_subgraph, idCLs[i])
+                p_value = _run_fisher_exact_test(downsample_subgraph, idCLs[i])
 
                 # If p value is significant, move on to the next comparison
                 if p_value < p_threshold:
@@ -880,7 +862,7 @@ def part2_filter(owl_graph, downsample_graph, idCLs, cell_labels_df, p_threshold
 
     return modified_idCLs, owl_graph
 
-def keep_calling_part2(owl_graph, downsample_graph, idCLs, cell_labels_df, p_threshold, epsilon):
+def _keep_calling_part2(owl_graph, downsample_graph, idCLs, cell_labels_df, p_threshold, epsilon):
     """
     This calls our part2_filter function over and over
 
@@ -900,7 +882,7 @@ def keep_calling_part2(owl_graph, downsample_graph, idCLs, cell_labels_df, p_thr
     # Keep looping until no changes are made
     while changed:
         # Call part2_filter function and get the modified_idCLs list
-        modified_idCLs, modified_owl = part2_filter(owl_graph, 
+        modified_idCLs, modified_owl = _part2_filter(owl_graph, 
                                                     downsample_graph, 
                                                     idCLs, cell_labels_df, 
                                                     p_threshold=p_threshold, 
@@ -920,7 +902,7 @@ def keep_calling_part2(owl_graph, downsample_graph, idCLs, cell_labels_df, p_thr
     return modified_idCLs
 
 #   Part 3 Filtering (Requires run_stvea() output: nearest neighbor distances)
-def calculate_D1(nn_dist):
+def _calculate_D1(nn_dist):
     results = pd.DataFrame()
     # Find all nearest neighbors (non-zero value) for each row (query cell)
     # Take the sum of all the distances to each nearest neighbor
@@ -935,7 +917,7 @@ def calculate_D1(nn_dist):
 
     return results
 
-def calculate_D2_fast(nn_dist):
+def _calculate_D2_fast(nn_dist):
     # List to hold all average pairwise distances for each row/query cell
     avg_pairwise_distances = []
 
@@ -973,7 +955,7 @@ def calculate_D2_fast(nn_dist):
     d2_df = pd.DataFrame(index=nn_dist.index, data=avg_pairwise_distances, columns=["avg_pairwise_distance"])
     return d2_df
 
-def calculate_D1_D2_ratio(D1, D2):
+def _calculate_D1_D2_ratio(D1, D2):
     # Combine the two dataframes
     combined = pd.concat([D1, D2], axis=1)
 
@@ -982,7 +964,7 @@ def calculate_D1_D2_ratio(D1, D2):
     return combined
 
 #   Part 4 Filtering (Requires run_stvea() output: transfer matrix and imputed reference dataset from server)
-def group_cells_by_type(imputed_reference):
+def _group_cells_by_type(imputed_reference):
     cell_indices_by_type = {}
     
     # Single out the 'idCL' column
@@ -997,7 +979,7 @@ def group_cells_by_type(imputed_reference):
 
     return cell_indices_by_type
 
-def calculate_entropies_fast(transfer_matrix, cell_indices_by_type):
+def _calculate_entropies_fast(transfer_matrix, cell_indices_by_type):
     # Create a DataFrame to hold the summed probabilities for each cell type
     cell_type_sums = pd.DataFrame(index=transfer_matrix.index)
 
@@ -1061,7 +1043,7 @@ class ImmunoPhenoDB_Connect:
                 idCLs = idCL_JSON['idCLs']
 
                 self._db_idCLs = idCLs
-                self._subgraph = subgraph(self._OWL_graph, self._db_idCLs)
+                self._subgraph = _subgraph(self._OWL_graph, self._db_idCLs)
 
                 convert_idCL = {
                     "idCL": list(self._subgraph.nodes)
@@ -1094,9 +1076,9 @@ class ImmunoPhenoDB_Connect:
             hover_names = []
             for node in list(self._subgraph.nodes):
                 hover_names.append(self._db_idCL_names[node])
-            plotly_graph = plotly_subgraph(self._subgraph, self._db_idCLs, hover_names)
+            plotly_graph = _plotly_subgraph(self._subgraph, self._db_idCLs, hover_names)
         else:
-            leaf_nodes = find_leaf_nodes(self._subgraph, root)
+            leaf_nodes = _find_leaf_nodes(self._subgraph, root)
             
             if len(leaf_nodes) == 0:
                 # If there are no leaf nodes of root, then we were already provided a leaf node
@@ -1110,7 +1092,7 @@ class ImmunoPhenoDB_Connect:
                 hover_names = []
                 for node in list(default_subgraph.nodes):
                     hover_names.append(self._db_idCL_names[node])
-                plotly_graph = plotly_subgraph(default_subgraph, node_in_db, hover_names)
+                plotly_graph = _plotly_subgraph(default_subgraph, node_in_db, hover_names)
                 
             elif len(leaf_nodes) == 1:
                 # If there was only one leaf node, we can directly plot the descendants to that node
@@ -1125,12 +1107,12 @@ class ImmunoPhenoDB_Connect:
                 hover_names = []
                 for node in list(default_subgraph.nodes):
                     hover_names.append(self._db_idCL_names[node])
-                plotly_graph = plotly_subgraph(default_subgraph, node_in_db, hover_names)
+                plotly_graph = _plotly_subgraph(default_subgraph, node_in_db, hover_names)
                 
             else:
                 # Multiple leaf nodes require finding the lowest common ancestor
                 # Use custom subgraph function
-                custom_subgraph = find_subgraph_from_root(self._subgraph, root, leaf_nodes)
+                custom_subgraph = _find_subgraph_from_root(self._subgraph, root, leaf_nodes)
                 # Include the original node
                 nodes_to_plot = list(custom_subgraph.nodes)
                 # Check if these were in the database
@@ -1139,7 +1121,7 @@ class ImmunoPhenoDB_Connect:
                 hover_names = []
                 for node in list(custom_subgraph.nodes):
                     hover_names.append(self._db_idCL_names[node])
-                plotly_graph = plotly_subgraph(custom_subgraph, node_in_db, hover_names)
+                plotly_graph = _plotly_subgraph(custom_subgraph, node_in_db, hover_names)
                 
         return plotly_graph
 
@@ -1206,7 +1188,7 @@ class ImmunoPhenoDB_Connect:
 
         # Plot using plotly
         for idCL, summary_stats_df in idCL_plots.items():
-            fig = plot_antibodies_graph(idCL, res_df, summary_stats_df)
+            fig = _plot_antibodies_graph(idCL, res_df, summary_stats_df)
             all_figures[idCL] = fig
     
         return (res_df, all_figures)
@@ -1272,7 +1254,7 @@ class ImmunoPhenoDB_Connect:
         # Plot here using plotly
         all_figures = {}
         for ab, celltypes_plot_df in plotting_dfs.items():
-            fig = plot_celltypes_graph(ab, ab_df_dict[ab], celltypes_plot_df)
+            fig = _plot_celltypes_graph(ab, ab_df_dict[ab], celltypes_plot_df)
             all_figures[ab] = fig
             
         return ab_df_dict, all_figures
@@ -1395,7 +1377,7 @@ class ImmunoPhenoDB_Connect:
 
             # Impute any missing values in reference dataset
             print("Imputing missing values...")
-            imputed_reference = impute_dataset_by_type(reference_dataset, rho=rho) 
+            imputed_reference = _impute_dataset_by_type(reference_dataset, rho=rho) 
 
             # Apply stvea_correction value
             self.imputed_reference = imputed_reference.copy(deep=True).applymap(
@@ -1413,7 +1395,7 @@ class ImmunoPhenoDB_Connect:
         codex_normalized_with_ids = IPD_new._normalized_counts_df.rename(columns=IPD_new._ab_ids_dict, inplace=False)
     
         # Perform check for rows/columns with all 0s or NAs
-        codex_normalized_with_ids = remove_all_zeros_or_na(codex_normalized_with_ids)
+        codex_normalized_with_ids = _remove_all_zeros_or_na(codex_normalized_with_ids)
                         
         # At this stage, we have all the information we need to run STvEA
         print("Running STvEA...")
@@ -1508,7 +1490,7 @@ class ImmunoPhenoDB_Connect:
         
             # Downsample to 5000 cells and get pairwise distance matrix
             print("Downsampling dataset to 5000 cells...")
-            ds_norm = downsample(norm_combine, downsample_size=5000)
+            ds_norm = _downsample(norm_combine, downsample_size=5000)
         
             # Calculate the pairwise correlation distances between all rows (cells)
             print("Calculating pairwise distances between cells...")
@@ -1516,11 +1498,11 @@ class ImmunoPhenoDB_Connect:
             pairwise_correlation = (1 - df_without_idCL.T.corr())
         
             # Create adjacency matrix
-            adj_mat = pearson_correlation_adjaceny_matrix(pairwise_correlation)
+            adj_mat = _pearson_correlation_adjaceny_matrix(pairwise_correlation)
         
             # Create graph
             print("Generating cell graph...")
-            G = fast_cell_label_graph(adj_mat)
+            G = _fast_cell_label_graph(adj_mat)
         
             # Set cell type for each node in graph
             nx.set_node_attributes(G, ct_lookup, "celltype")
@@ -1539,7 +1521,7 @@ class ImmunoPhenoDB_Connect:
         print("Conducting fisher exact test for each cell type...")
         # Perform fisher for every cell type
         for celltype in all_celltypes:
-            p_val = run_fisher_exact_test(G, celltype)
+            p_val = _run_fisher_exact_test(G, celltype)
             if p_val > p_threshold:
                 labels_to_remove.append(celltype)
     
@@ -1594,7 +1576,7 @@ class ImmunoPhenoDB_Connect:
         
             # Downsample to 5000 cells and get pairwise distance matrix
             print("Downsampling dataset to 5000 cells...")
-            ds_norm = downsample(norm_combine, downsample_size=5000)
+            ds_norm = _downsample(norm_combine, downsample_size=5000)
         
             # Calculate the pairwise correlation distances between all rows (cells)
             print("Calculating pairwise distances between cells...")
@@ -1602,11 +1584,11 @@ class ImmunoPhenoDB_Connect:
             pairwise_correlation = (1 - df_without_idCL.T.corr())
         
             # Create adjacency matrix
-            adj_mat = pearson_correlation_adjaceny_matrix(pairwise_correlation)
+            adj_mat = _pearson_correlation_adjaceny_matrix(pairwise_correlation)
         
             # Create graph
             print("Generating cell graph...")
-            G = fast_cell_label_graph(adj_mat)
+            G = _fast_cell_label_graph(adj_mat)
         
             # Set cell type for each node in graph
             nx.set_node_attributes(G, ct_lookup, "celltype")
@@ -1628,7 +1610,7 @@ class ImmunoPhenoDB_Connect:
         cell_labels_df = IPD.labels.copy(deep=True)
     
         # Call filter function until no more labels are filtered out. This modifies cell_labels_df in-place
-        celltypes_remaining = keep_calling_part2(owl_graph_deepcopy.to_undirected(), 
+        celltypes_remaining = _keep_calling_part2(owl_graph_deepcopy.to_undirected(), 
                                                  downsample_graph_deepcopy, 
                                                  idCLs, 
                                                  cell_labels_df, 
@@ -1658,13 +1640,13 @@ class ImmunoPhenoDB_Connect:
         cell_labels_df = IPD.labels
         
         # D1 values
-        d1_df = calculate_D1(self._nn_dist)
+        d1_df = _calculate_D1(self._nn_dist)
 
         # D2 values
-        d2_df = calculate_D2_fast(self._nn_dist)
+        d2_df = _calculate_D2_fast(self._nn_dist)
 
         # D1/D2 ratio
-        ratio_df = calculate_D1_D2_ratio(d1_df, d2_df)        
+        ratio_df = _calculate_D1_D2_ratio(d1_df, d2_df)        
 
         # Find all rows/cells with a ratio greater than the threshold
         cells_to_unlabel = ratio_df[ratio_df["ratio"] > distance_ratio_threshold]
@@ -1707,10 +1689,10 @@ class ImmunoPhenoDB_Connect:
         cell_labels_df = IPD.labels
         
         # Find cell indices for each cell type
-        cell_indices_by_type = group_cells_by_type(self.imputed_reference)
+        cell_indices_by_type = _group_cells_by_type(self.imputed_reference)
 
         # Calculate entropies for each cell type for each query cell in transfer matrix
-        entropies_df = calculate_entropies_fast(self.transfer_matrix, cell_indices_by_type)
+        entropies_df = _calculate_entropies_fast(self.transfer_matrix, cell_indices_by_type)
         
         # Find all rows/cells with a ratio greater than the threshold
         cells_to_unlabel = entropies_df[entropies_df["entropy"] > entropy_threshold]
@@ -1753,13 +1735,13 @@ class ImmunoPhenoDB_Connect:
         
         # Plot distance D1/D2 ratios
         # D1 values
-        d1_df = calculate_D1(self._nn_dist)
+        d1_df = _calculate_D1(self._nn_dist)
 
         # D2 values
-        d2_df = calculate_D2_fast(self._nn_dist)
+        d2_df = _calculate_D2_fast(self._nn_dist)
 
         # D1/D2 ratio
-        ratio = calculate_D1_D2_ratio(d1_df, d2_df)        
+        ratio = _calculate_D1_D2_ratio(d1_df, d2_df)        
 
         # Plot a histogram of all ratio values to decide on the ratio_threshold
         ratio_fig = px.histogram(ratio["ratio"], title="D1/D2 Ratios For All Query Cells" + 
@@ -1771,10 +1753,10 @@ class ImmunoPhenoDB_Connect:
 
         # Plot entropy values
         # Find cell indices for each cell type
-        cell_indices_by_type = group_cells_by_type(self.imputed_reference)
+        cell_indices_by_type = _group_cells_by_type(self.imputed_reference)
 
         # Calculate entropies for each cell type for each query cell in transfer matrix
-        entropies_df = calculate_entropies_fast(self.transfer_matrix, cell_indices_by_type)
+        entropies_df = _calculate_entropies_fast(self.transfer_matrix, cell_indices_by_type)
 
         entropy_fig = px.histogram(entropies_df["entropy"], title="Entropies For All Query Cells").update_layout(height=500)
         entropy_fig.show()
