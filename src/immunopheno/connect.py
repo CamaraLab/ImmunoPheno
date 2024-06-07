@@ -994,7 +994,7 @@ def _calculate_entropies_fast(transfer_matrix, cell_indices_by_type):
     # Convert the result to a DataFrame
     entropies_df = entropies.to_frame(name='entropy')
     
-    return entropies_df
+    return cell_type_sums, entropies_df
 
 class ImmunoPhenoDB_Connect:
     def __init__(self, url: str):
@@ -1464,6 +1464,30 @@ class ImmunoPhenoDB_Connect:
 
         # Make sure the indexes match
         IPD_new._normalized_counts_df = IPD_new._normalized_counts_df.loc[IPD_new._cell_labels_filt_df.index]
+        
+        # Calculate distance ratios and entropies after STvEA has finished running
+        # D1 values
+        d1_df = _calculate_D1(self._nn_dist)
+
+        # D2 values
+        d2_df = _calculate_D2_fast(self._nn_dist)
+
+        # D1/D2 ratio
+        ratio = _calculate_D1_D2_ratio(d1_df, d2_df)        
+
+        # Store ratio table in IPD_new
+        IPD_new.distance_ratios = ratio
+        
+        # Plot entropy values
+        # Find cell indices for each cell type
+        cell_indices_by_type = _group_cells_by_type(self.imputed_reference)
+
+        # Calculate entropies for each cell type for each query cell in transfer matrix
+        cell_type_sums, entropies_df = _calculate_entropies_fast(self.transfer_matrix, cell_indices_by_type)
+        # Store both cell type probabilities and entropies in IPD_new
+        IPD_new.cell_type_prob = cell_type_sums
+        IPD_new.entropies = entropies_df
+
         print("Annotation transfer complete.")
         return IPD_new
 
@@ -1537,7 +1561,9 @@ class ImmunoPhenoDB_Connect:
         for cell_type, group in grouped:
             if cell_type == "Not Assigned":
                 continue
-            print(f"{cell_type}: {len(group.index)}")
+            # Convert to readable name
+            readable = _convert_idCL_readable(cell_type)
+            print(f"{readable} ({cell_type}): {len(group.index)}")
     
         # Make a copy of the object to return
         temp_copy = copy.deepcopy(IPD)
@@ -1666,7 +1692,9 @@ class ImmunoPhenoDB_Connect:
         for cell_type, group in grouped:
             if cell_type == "Not Assigned":
                 continue
-            print(f"{cell_type}: {len(group.index)}")
+            # Convert to readable name
+            readable = _convert_idCL_readable(cell_type)
+            print(f"{readable} ({cell_type}): {len(group.index)}")
 
         # Renaming step
         temp_labels.loc[cells_to_unlabel.index, ['labels', 'celltype']] = "Not Assigned"
@@ -1693,7 +1721,7 @@ class ImmunoPhenoDB_Connect:
         cell_indices_by_type = _group_cells_by_type(self.imputed_reference)
 
         # Calculate entropies for each cell type for each query cell in transfer matrix
-        entropies_df = _calculate_entropies_fast(self.transfer_matrix, cell_indices_by_type)
+        cell_type_sums, entropies_df = _calculate_entropies_fast(self.transfer_matrix, cell_indices_by_type)
         
         # Find all rows/cells with a ratio greater than the threshold
         cells_to_unlabel = entropies_df[entropies_df["entropy"] > entropy_threshold]
@@ -1705,14 +1733,16 @@ class ImmunoPhenoDB_Connect:
         cells_group_df = (temp_labels.loc[cells_to_unlabel.index])
         # Disregard cells that were already named "Not assigned"
         num_cells_already_not_assigned = sum(cells_group_df["labels"] == "Not Assigned")
-        print("Number of cells renamed to 'Not Assigned':", len(cells_group_df) - num_cells_already_not_assigned )
+        print("Number of cells renamed to 'Not Assigned':", len(cells_group_df) - num_cells_already_not_assigned)
         
         # Group all rows by cell type
         grouped = cells_group_df.groupby('labels')
         for cell_type, group in grouped:
             if cell_type == "Not Assigned":
                 continue
-            print(f"{cell_type}: {len(group.index)}")
+            # Convert to readable name
+            readable = _convert_idCL_readable(cell_type)
+            print(f"{readable} ({cell_type}): {len(group.index)}")
 
         # Renaming step
         temp_labels.loc[cells_to_unlabel.index, ['labels', 'celltype']] = "Not Assigned"
@@ -1728,39 +1758,6 @@ class ImmunoPhenoDB_Connect:
         temp_copy.labels = temp_labels
         
         return temp_copy
-    
-    def plot_filter_metrics(self):
-        # Check if transfer_matrix and imputed_reference exists
-        if self._nn_dist is None or self.transfer_matrix is None or self.imputed_reference is None:
-            raise Exception("Missing transfer_matrix. run_stvea() must be called to use plot_filter_metrics()")
-        
-        # Plot distance D1/D2 ratios
-        # D1 values
-        d1_df = _calculate_D1(self._nn_dist)
-
-        # D2 values
-        d2_df = _calculate_D2_fast(self._nn_dist)
-
-        # D1/D2 ratio
-        ratio = _calculate_D1_D2_ratio(d1_df, d2_df)        
-
-        # Plot a histogram of all ratio values to decide on the ratio_threshold
-        ratio_fig = px.histogram(ratio["ratio"], title="D1/D2 Ratios For All Query Cells" + 
-                            "<br>" +
-                            "<sup>D1: Average distance between nearest neighbor and query cell</sup>" +
-                            "<br>" + 
-                            "<sup>D2: Average pairwise distance among nearest neighbors</sup>").update_layout(height=500)
-        ratio_fig.show()
-
-        # Plot entropy values
-        # Find cell indices for each cell type
-        cell_indices_by_type = _group_cells_by_type(self.imputed_reference)
-
-        # Calculate entropies for each cell type for each query cell in transfer matrix
-        entropies_df = _calculate_entropies_fast(self.transfer_matrix, cell_indices_by_type)
-
-        entropy_fig = px.histogram(entropies_df["entropy"], title="Entropies For All Query Cells").update_layout(height=500)
-        entropy_fig.show()
 
     def filter_labels(self, 
                       IPD,
@@ -1794,27 +1791,30 @@ class ImmunoPhenoDB_Connect:
         
         # Start with the initial IPD
         IPD_new = copy.deepcopy(IPD)
-        
-        # Call the localization function if needed
-        if localization:
-            print("Performing localization...")
-            IPD_new = self._part1_localization(IPD=IPD_new, p_threshold=p_threshold_localization)
-            print("Localization complete.\n")
-        # Call the merging function if needed
-        if merging:
-            print("Performing merging...")
-            IPD_new = self._part2_merging(IPD=IPD_new, p_threshold=p_threshold_merging, epsilon=epsilon_merging)
-            print("Merging complete.\n")
+
         # Call the distance_ratio function if needed
         if distance_ratio:
             print("Performing nearest neighbor distance ratio filtering...")
             IPD_new = self._part3_reassign_by_distance_ratio(IPD=IPD_new, distance_ratio_threshold=distance_ratio_threshold)
             print("Distance_ratio filtering complete.\n")
+
         # Call the entropy function if needed
         if entropy:
             print("Performing cell type entropy filtering...")
             IPD_new = self._part4_reassign_by_entropy(IPD=IPD_new, entropy_threshold=entropy_threshold)
             print("Entropy filtering complete.\n")
+
+        # Call the localization function if needed
+        if localization:
+            print("Performing localization...")
+            IPD_new = self._part1_localization(IPD=IPD_new, p_threshold=p_threshold_localization)
+            print("Localization complete.\n")
+
+        # Call the merging function if needed
+        if merging:
+            print("Performing merging...")
+            IPD_new = self._part2_merging(IPD=IPD_new, p_threshold=p_threshold_merging, epsilon=epsilon_merging)
+            print("Merging complete.\n")
         
         # Make sure all "Not Assigned" rows are consistent in both "labels" and "celltypes" column of IPD.labels
         IPD_new.labels.loc[IPD_new.labels["labels"] == "Not Assigned", "celltype"] = "Not Assigned"
