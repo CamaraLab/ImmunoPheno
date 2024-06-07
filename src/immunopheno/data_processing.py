@@ -1447,7 +1447,7 @@ class ImmunoPhenoData:
             Format: scanpy is an AnnData object containing an 'obs' field
                 Ex: AnnData.obs['scanpy_labels']
     """
-    
+
     def __init__(self,
                  protein_matrix: str | pd.DataFrame = None,
                  gene_matrix: str | pd.DataFrame = None,
@@ -1487,6 +1487,11 @@ class ImmunoPhenoData:
         # Used when sending data to the server for running STvEA
         self._background_cell_z_score = -10
         self._stvea_correction_value = 0
+
+        # Dataframes from run_stvea in the ImmunoPhenoDB_Connect class
+        self.distance_ratios = None
+        self.cell_type_prob = None
+        self.entropies = None
 
         # If loading in a scanpy object
         if scanpy is not None:
