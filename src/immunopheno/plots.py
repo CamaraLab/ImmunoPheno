@@ -2,14 +2,13 @@ import seaborn as sns
 import plotly.express as px
 import umap
 
-from .data_processing import _correlation_ab, PlotUMAPError
+from .data_processing import _correlation_ab, PlotUMAPError, ImmunoPhenoData
 
-def plot_antibody_correlation(IPD):
-    """
-    Plots a correlation heatmap for each antibody in the data
+def plot_antibody_correlation(IPD: ImmunoPhenoData):
+    """Plots a correlation heatmap for each antibody in the data
 
-    Parameters:
-        IPD (ImmunoPhenoData Object): Object containing protein data,
+    Args:
+        IPD (ImmunoPhenoData Object): object containing protein data,
             gene data, and cell types
     
     Returns:
@@ -20,15 +19,42 @@ def plot_antibody_correlation(IPD):
     g = sns.clustermap(corr_df, vmin=-1, vmax=1, cmap='BrBG')
     g.ax_cbar.set_position((1, .2, .03, .4))
  
-def plot_UMAP(IPD,
+def plot_filter_metrics(IPD: ImmunoPhenoData):
+    """Plots a histogram of all D1/D2 distance ratios and entropies returned from run_stvea()
+
+    Args:
+        IPD (ImmunoPhenoData Object): object must contain table containing distance ratios and entropies. 
+            These are stored in the object after calling run_stvea() from the ImmunoPhenoDB_Connect class. 
+
+    Returns:
+        None. Renders two plotly histograms.  
+    """
+    # Check if distance ratios and entropies exists
+    if IPD.distance_ratios is None or IPD.entropies is None:
+        raise Exception("Missing distance ratios or entropies. Call run_stvea() first to use plot_filter_metrics()")
+    
+    ratio = IPD.distance_ratios
+    entropies_df = IPD.entropies
+
+    # Plot a histogram of all ratio values to decide on the ratio_threshold
+    ratio_fig = px.histogram(ratio["ratio"], title="D1/D2 Ratios For All Query Cells" + 
+                        "<br>" +
+                        "<sup>D1: Average distance between nearest neighbor and query cell</sup>" +
+                        "<br>" + 
+                        "<sup>D2: Average pairwise distance among nearest neighbors</sup>").update_layout(height=500)
+    ratio_fig.show()
+
+
+    entropy_fig = px.histogram(entropies_df["entropy"], title="Entropies For All Query Cells").update_layout(height=500)
+    entropy_fig.show()
+
+def plot_UMAP(IPD: ImmunoPhenoData,
               normalized: bool = False,
               **kwargs):
-    """ 
-    Plots a UMAP for the non-normalized protein values or normalized protein
-    values
+    """ Plots a UMAP for the non-normalized protein values or normalized protein values
 
-    Parameters:
-        IPD (ImmunoPhenoData Object): Object containing protein data,
+    Args:
+        IPD (ImmunoPhenoData Object): object containing protein data,
             gene data, and cell types
         normalized (bool): option to plot normalized values
         **kwargs: various arguments to UMAP class constructor, including default values:
