@@ -989,7 +989,7 @@ def _calculate_entropies_fast(transfer_matrix, cell_indices_by_type):
         cell_type_sums[cell_type] = transfer_matrix[indices].sum(axis=1)
     
     # Calculate entropy for each query cell
-    entropies = cell_type_sums.apply(lambda row: entropy(row), axis=1)
+    entropies = cell_type_sums.apply(lambda row: entropy(row, base=2), axis=1)
     
     # Convert the result to a DataFrame
     entropies_df = entropies.to_frame(name='entropy')
@@ -1329,14 +1329,14 @@ class ImmunoPhenoDB_Connect:
                   rho: float = 0.5,
                   population_size: int = 50,
                   # STvEA parameters
-                  k_find_nn: int = 80,
+                  k_find_nn: int = 40,
                   k_find_anchor: int = 20,
-                  k_filter_anchor: int = 100,
-                  k_score_anchor: int = 80,
-                  k_find_weights: int = 100,
-                  k_transfer_matrix = None,
-                  c_transfer_matrix: float = 0.1,
-                  mask_threshold: float = 0.5,
+                  k_filter_anchor: int = 40,
+                  k_score_anchor: int = 30,
+                  k_find_weights: int = 40,
+                  k_transfer_matrix = 40,
+                  c_transfer_matrix: float = 0.5,
+                  mask_threshold: float = 0.75,
                   mask: bool = True,
                   num_chunks=1,
                   num_cores=1):
