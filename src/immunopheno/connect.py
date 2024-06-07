@@ -989,7 +989,7 @@ def _calculate_entropies_fast(transfer_matrix, cell_indices_by_type):
         cell_type_sums[cell_type] = transfer_matrix[indices].sum(axis=1)
     
     # Calculate entropy for each query cell
-    entropies = cell_type_sums.apply(lambda row: entropy(row), axis=1)
+    entropies = cell_type_sums.apply(lambda row: entropy(row, base=2), axis=1)
     
     # Convert the result to a DataFrame
     entropies_df = entropies.to_frame(name='entropy')
