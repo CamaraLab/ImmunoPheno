@@ -1109,7 +1109,7 @@ def _normalize_antibody(fit_results: dict,
                         lin_reg_dict: dict = None,
                         lin_reg: pd.DataFrame = None) -> list:
         """
-        Normalizes single cell or flow cytometry values for an antibody
+        Normalizes single cell or cytometry values for an antibody
 
         Parameters:
             fit_results (dict): optimization results for an antibody, containing
@@ -1147,7 +1147,7 @@ def _normalize_antibody(fit_results: dict,
 
             elif classified_cells[i] == 1:
 
-                # If dealing with flow cytometry data
+                # If dealing with cytometry data
                 if (cell_labels_filt_df is None
                     and lin_reg_dict is None
                     and lin_reg is None):
@@ -1429,23 +1429,25 @@ class ImmunoPhenoData:
     """A class to hold single-cell data (CITE-Seq, etc) and cytometry data.
     
     Performs fitting of gaussian/negative binomial mixture models and
-    normalization to antibodies present in a protein dataset. 
+    normalization to antibodies present in a protein dataset. Requires protein
+    data to be supplied using the protein_matrix or scanpy field.
 
     Args:
-        protein_matrix (str | pd.Dataframe): file path or dataframe to ADT count matrix. 
-            Format: Row (cells) x column (proteins/antibodies).
+        protein_matrix (str | pd.Dataframe): file path or dataframe to ADT count/protein matrix. 
+            Format: Row (cells) x column (antibodies/proteins).
         gene_matrix (str | pd.DataFrame): file path or dataframe to UMI count matrix.
             Format: Row (cells) x column (genes).
         cell_labels (str | pd.DataFrame): file path or dataframe to cell type labels. 
-            Format: Row (cells) x column (cell type such as Cell Ontology ID). The column
-            name should be called "labels". 
+            Format: Row (cells) x column (cell type such as Cell Ontology ID). Must contain 
+            a column called "labels".
         spreadsheet (str): name of csv file containing a spreadsheet with
-            information about the experiment and antibodies. Used for uploading data to the database.
+            information about the experiment and antibodies. Used for uploading data to a database.
         scanpy (anndata.AnnData): scanpy AnnData object used to load in protein and gene data.
-        scanpy_labels (str): location of cell labels inside a scanpy object.
+        scanpy_labels (str): location of cell labels inside a scanpy object. 
             Format: scanpy is an AnnData object containing an 'obs' field
                 Ex: AnnData.obs['scanpy_labels']
     """
+    
     def __init__(self,
                  protein_matrix: str | pd.DataFrame = None,
                  gene_matrix: str | pd.DataFrame = None,
@@ -1532,7 +1534,7 @@ class ImmunoPhenoData:
             self._singleR_rna = _singleR_rna(self._gene_matrix)
             self._temp_gene = self._gene_matrix.copy(deep=True)
 
-        # Flow
+        # Cytometry
         elif self._protein_matrix is not None and self._gene_matrix is None and scanpy is None:
             self._protein_matrix = _load_adt(self._protein_matrix)  # assume user provides cells as rows, ab as col
             self._temp_protein = self._protein_matrix.copy(deep=True)
@@ -1818,14 +1820,14 @@ class ImmunoPhenoData:
         after fit_all_antibodies has been called to modify individual fits.
 
         Args:
-            input (list | str): raw values from protein data or antibody name 
+            input (list | str): raw values from protein data or antibody name.
             ab_name (str, optional): name of antibody. Ignore if calling 
                 fit_antibody by supplying the antibody name in the "input" parameter.
-            transform_type (str): type of transformation. "log" or "arcsinh"
-            transform_scale (int): multiplier applied during transformation
-            model (str): type of model to fit. "gaussian" or "nb"
-            plot (bool): option to plot each model
-            **kwargs: initial arguments for sklearn's GaussianMixture (optional)
+            transform_type (str): type of transformation. "log" or "arcsinh".
+            transform_scale (int): multiplier applied during transformation.
+            model (str): type of model to fit. "gaussian" or "nb".
+            plot (bool): option to plot each model.
+            **kwargs: initial arguments for sklearn's GaussianMixture (optional).
 
         Returns:
             dict: Results from optimization as either gauss_params/nb_params.
@@ -1936,11 +1938,11 @@ class ImmunoPhenoData:
         the names of the antibodies that were fit with a single component model.
         
         Args:
-            transform_type (str): type of transformation. "log" or "arcsinh"
+            transform_type (str): type of transformation. "log" or "arcsinh".
             transform_scale (int): multiplier applied during transformation.
-            model (str): type of model to fit. "gaussian" or "nb"
-            plot (bool): option to plot each model
-            **kwargs: initial arguments for sklearn's GaussianMixture (optional)
+            model (str): type of model to fit. "gaussian" or "nb".
+            plot (bool): option to plot each model.
+            **kwargs: initial arguments for sklearn's GaussianMixture (optional).
         
         Returns:
             None. Results will be stored in the class. This is accessible using 
@@ -2130,7 +2132,7 @@ class ImmunoPhenoData:
                                     lin_reg=lin_reg,
                                     cumulative=cumulative)
 
-        # Else, normalize values for flow cytometry data
+        # Else, normalize values for cytometry data
         else:
             # Normalize all values in the protein matrix
             normalized_df = _normalize_antibodies_df(
