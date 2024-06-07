@@ -59,7 +59,7 @@ def _find_background_comp(fit_results: dict) -> int:
         
     return background_component
 
-def plot_fits(counts: list,
+def _plot_fits(counts: list,
               fit_results: dict,
               ab_name: str,
               width:int = None):
@@ -408,7 +408,7 @@ def plot_ab_fit(IPD, ab: str, width: int = None):
 
     if isinstance(ab, str):
         try:
-            plot_fits(counts=IPD.protein.loc[:, ab],
+            _plot_fits(counts=IPD.protein.loc[:, ab],
                       fit_results=IPD._all_fits_dict[ab],
                       ab_name=ab,
                       width=width)
@@ -435,7 +435,7 @@ def plot_all_fits(IPD, width: int = None):
         raise Exception("No fits found. Call fit_all_antibodies first")
     
     for index, ab in enumerate(IPD.protein):
-        plot_fits(counts=IPD.protein.loc[:, ab],
+        _plot_fits(counts=IPD.protein.loc[:, ab],
                   fit_results=IPD._all_fits_dict[ab],
                   ab_name=ab,
                   width=width)
