@@ -999,13 +999,14 @@ def _calculate_entropies_fast(transfer_matrix, cell_indices_by_type):
 class ImmunoPhenoDB_Connect:
     def __init__(self, url: str):
         self.url = url
+        self.imputed_reference = None
+        self.transfer_matrix = None
+
         self._OWL_graph = None
         self._subgraph = None
         self._db_idCLs = None
         self._db_idCL_names = None
         self._last_stvea_params = None
-        self.imputed_reference = None
-        self.transfer_matrix = None
         self._downsample_pairwise_graph = None
         self._nn_dist = None
 
