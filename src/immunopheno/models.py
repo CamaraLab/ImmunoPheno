@@ -397,7 +397,7 @@ def plot_ab_fit(IPD, ab: str, width: int = None):
         width (int): display width of all the graphs (optional)
 
     Returns:
-        A series of plots (1, 2, 3 component mixture models) for an
+        None. Renders a series of plots (1, 2, 3 component mixture models) for an
         antibody after fitting with a negative binomial or gaussian curve.
     """
     if IPD._all_fits is None:
@@ -425,7 +425,7 @@ def plot_all_fits(IPD, width: int = None):
         width (int): display width of all the graphs (optional)
     
     Returns:
-        A series of plots with each type of mixture model for every antibody
+        None. Renders a series of plots with each type of mixture model for every antibody
         in the protein data
     """
     if IPD._all_fits is None:

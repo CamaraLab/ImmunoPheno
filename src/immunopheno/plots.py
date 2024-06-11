@@ -12,7 +12,7 @@ def plot_antibody_correlation(IPD: ImmunoPhenoData):
             gene data, and cell types
     
     Returns:
-        seaborn clustermap for a heatmap of the antibodies
+        None. Renders a seaborn clustermap for a heatmap of the antibodies.
     """
     # Calculate correlation dataframe
     corr_df = _correlation_ab(IPD._classified_filt_df, IPD._z_scores_df)
@@ -64,7 +64,7 @@ def plot_UMAP(IPD: ImmunoPhenoData,
             metric (str): "euclidean"
 
     Returns:
-        UMAP projection of non/normalized protein values with a corresponding
+        go.Figure: UMAP projection of non/normalized protein values with a corresponding
         legend of cell type (if available)
     """
     # Check if existing UMAP is present in class AND UMAP parameters have not changed
