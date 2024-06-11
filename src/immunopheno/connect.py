@@ -14,7 +14,7 @@ import networkx as nx
 from networkx.exception import NetworkXError
 from nxontology.imports import from_file
 from networkx.algorithms.dag import dag_longest_path
-
+from .data_processing import ImmunoPhenoData
 import matplotlib.pyplot as plt
 from netgraph import Graph
 
@@ -997,6 +997,24 @@ def _calculate_entropies_fast(transfer_matrix, cell_indices_by_type):
     return cell_type_sums, entropies_df
 
 class ImmunoPhenoDB_Connect:
+    """A class to interact with the ImmunoPheno database
+
+    Performs queries to a database containing curated single cell data from
+    different experiments, tissues, antibodies, and cell populations. These queries
+    can be used to find antibodies for gating specific cell populations,
+    perform automatic annotation of cytometry data, and design optimal antibody panels
+    for cytometry experiments.
+
+    Args:
+        url (str): URL link to the ImmunoPheno database server.
+
+    Attributes:
+        url (str): URL link to the ImmunoPheno database server.
+        imputed_reference (pd.DataFrame): reference antigenic dataset returned from
+            the database after calling run_stvea. Format: Row (cells) x column (antibodies).
+        transfer_matrix (pd.DataFrame): transfer matrix returned after calling run_stvea.
+            Format: Row (query cells) x column (reference cells).
+    """
     def __init__(self, url: str):
         self.url = url
         self.imputed_reference = None
@@ -1070,7 +1088,25 @@ class ImmunoPhenoDB_Connect:
 
         return node_fam_dict
     
-    def plot_db_graph(self, root=None):
+    def plot_db_graph(self, root=None) -> go.Figure:
+        """Plots a graph of all cell type ontologies in the database
+
+        The graph will start with the root node of "CL:0000000" representing "cell".
+        This root node can be modified to hone in on a particular cell type and 
+        their descendant cell types. Nodes colored in red indicate cell ontologies for
+        which there are cells in the database containing those ontologies. Nodes in blue
+        indicate intermediary cell ontologies that have been dervied from 
+        those that are already in the database.
+
+        Args:
+            root (str): Root node in the graph. Modifying the root node
+                will return a subgraph containing descendants for only
+                that modified root node. 
+
+        Returns:
+            go.Figure: Graph containing cell ontologies as nodes. This plotly figure 
+            can be further updated or styled.
+        """
         if root is None:
             # We already calculated the database's subgraph in self._subgraph
             # Find hover names
@@ -1131,7 +1167,35 @@ class ImmunoPhenoDB_Connect:
                         background_id_CLs: list = None,
                         idBTO: list = None, 
                         idExperiment: list = None)-> tuple: 
-        
+        """Queries the database to find antibodies that mark a provided list of cell populations.
+
+        This function contains two parameters to accept a list of cell populations in the form of cell ontology IDs.
+        If providing a list for "id_CLs", the function will return a table of antibodies that are
+        expressed in those cell populations. If a list is also provided for "background_id_CLs", the function
+        returns a table of antibodies that can distinguish cells in populations defined in "id_CLs" from those
+        defined in "background_id_CLs". Additional filters based on tissue and experiment IDs can be applied
+        to restrict the data in the query.
+
+        Args:
+            id_CLs (list): list of cell populations in the form of cell ontology IDs. 
+            background_id_CLs (list, optional): list of cell populations used for comparison.
+            idBTO (list): list of tissues in the form of BRENDA tissue ontology IDs.
+            idExperiment (list): list of experiment IDs from the database.
+
+        Returns:
+            tuple: Returns a tuple (pd.DataFrame, dictionary). 
+            
+            The dataframe contains rows for all possible antibodies found in each cell population.
+            The columns contain statistics regarding the upregulation or downregulation of 
+            an antibody for a cell population. The level of detection of an antibody for a
+            cell population is also included. 
+
+            The dictionary contains boxplots of antibodies for each provided 
+            cell population in both "id_CLs" and "background_id_CLs". Each plot contains the distribution
+            of normalized expression levels for each antibody in a specific cell population.
+            Each set of boxplots is accessible by providing the cell population ID as the key. 
+        """
+
         # First find all descendants of the provided id_CLs. These will be included 
         # when running the LMM
         try: 
@@ -1197,7 +1261,33 @@ class ImmunoPhenoDB_Connect:
     def find_celltypes(self,
                        ab_ids: list,
                        idBTO: list = None, 
-                       idExperiment: list = None) -> tuple: 
+                       idExperiment: list = None) -> tuple:
+        """Queries the database to find cell populations that are marked by a provided list of antibodies.
+
+        This function contains one parameter "ab_ids" to accept a list of antibody IDs. 
+        This finds all cell populations that are marked by each antibody provided. Additional filters 
+        based on tissue and experiment IDs can be applied to restrict the data in the query.
+
+        Args:
+            ab_ids (list): list of antibody IDs.
+            idBTO (list, optional): list of tissues in the form of BRENDA tissue ontology IDs.
+            idExperiment (list, optional): list of experiment IDs from the database.
+
+        Returns:
+            tuple: Returns a tuple (dictionary, dictionary).
+
+            The first dictionary in the tuple will be the query results from the database in the 
+            form of a dataframe. The dataframe contains rows for all possible cell populations
+            that the antibody marks. The columns contain statistics regarding the regulation of the
+            antibody in comparison to all other cell populations. Each dataframe
+            is accessibly by providing the antibody ID as the key.
+
+            The second dictionary in the tuple will be the boxplots for each provided antibody
+            in "ab_ids". Each plot contains the distribution of normalized expression levels
+            for cell populations marked by each antibody. Each set of boxplots is accessible
+            by providing the antibody ID as the key.
+        """
+
         # Dict to hold results (dataframe) for each antibody
         ab_df_dict = {}
         
@@ -1264,6 +1354,28 @@ class ImmunoPhenoDB_Connect:
                          ab: list = None,
                          idCL: list = None,
                          idBTO: list = None) -> pd.DataFrame:
+        """Queries the database to find experiments under specific requirements
+
+        The function must accept at least one parameter when looking up experiments. 
+        One parameter is to search by antibodies used in an experiment, which accepts a list of antibody IDs.
+        Another parameter is to search by the presence of cell populations, which accepts
+        a list of cell ontology IDs. The last parameter is to search by the usage of specific tissues,
+        which accepts a list of BRENDA tissue ontology IDs. A combination of these parameters
+        can be used to further narrow the number of experiments.
+
+        Args:
+            ab (list): list of antibody IDs.
+            idCL (list): list of cell populations in the form of cell ontology IDs.
+            idBTO (list): list of tissues in the form of BRENDA tissue ontology IDs.
+
+        Returns:
+            pd.DataFrame: Returns a dataframe containing information about each experiment.
+            This includes its database ID, name, type, PMID, DOI, tissue ID, and tissue name.
+        """
+
+        if ab is None and idCL is None and idBTO is None:
+            raise Exception("Error. At least one parameter must not be empty.")
+        
         exp_body = {
             "ab": ab,
             "idCL": idCL,
@@ -1280,7 +1392,18 @@ class ImmunoPhenoDB_Connect:
     
     def which_antibodies(self,
                          search_query: str) -> pd.DataFrame:
-        
+        """Queries the database to find antibodies based on a search phrase
+
+        Args:
+            search_query (str): a plain text input that contains words that will be used
+                to look up antibodies in the database. 
+
+        Returns:
+            pd.DataFrame: Returns a dataframe containing information about each antibody.
+            This includes: antibody ID, name, target, clonality, citation, clone ID, host organism,
+            vendor, catalog number, and all experiment IDs in which the antibody is used.
+        """
+
         wa_body = {
             "search_query": search_query
         }
@@ -1295,7 +1418,18 @@ class ImmunoPhenoDB_Connect:
     
     def which_celltypes(self,
                         search_query: str) -> pd.DataFrame:
-        
+        """Queries the database to find cell types based on a search phrase
+
+        Args:
+            search_query (str): a plain text input that contains words that will be used
+                to look up cell types in the database.
+
+        Returns:
+            pd.DataFrame: Returns a dataframe containing information about each cell type.
+            This includes: cell ontology ID, cell type name, and all experiment IDs
+            in which the cell type is found in. 
+        """
+
         wc_body = {
             "search_query": search_query
         }
@@ -1310,9 +1444,21 @@ class ImmunoPhenoDB_Connect:
     
     def which_experiments(self,
                           search_query: str) -> pd.DataFrame:
+        """Queries the database to find all experiments based on a search phrase
+
+        Args:
+            search_query (str): a plain text input that contains words that will be used
+                to look up experiments in the database.
+
+        Returns:
+            pd.DataFrame: Returns a dataframe containing information about each experiment.
+            This includes its database ID, name, type, PMID, DOI, tissue ID, and tissue name.
+        """
+
         we_body = {
             "search_query": search_query
         }
+
         we_response = requests.post(f"{self.url}/api/whichexperiments", json=we_body)
         if 'text/html' in we_response.headers.get('content-type'):
             raise Exception(we_response.text)
@@ -1322,7 +1468,7 @@ class ImmunoPhenoDB_Connect:
             return res_df
 
     def run_stvea(self,
-                  IPD,
+                  IPD: ImmunoPhenoData,
                   idBTO: list = None, 
                   idExperiment: list = None, 
                   parse_option: int = 1,
@@ -1334,13 +1480,67 @@ class ImmunoPhenoDB_Connect:
                   k_filter_anchor: int = 40,
                   k_score_anchor: int = 30,
                   k_find_weights: int = 40,
-                  k_transfer_matrix = 40,
+                  k_transfer_matrix: int = 40,
                   c_transfer_matrix: float = 0.5,
                   mask_threshold: float = 0.75,
                   mask: bool = True,
-                  num_chunks=1,
-                  num_cores=1):
-        
+                  num_chunks: int = 1,
+                  num_cores: int = 1):
+        """Automatically transfers single cell annotations to cytometry data
+
+        Uses reference data stored in the ImmunoPhenoDB database to annotate cells
+        in a cytometry dataset. This function uses an algorithm called STvEA, which 
+        uses a kNN approach in a consolidated protein expression space to map
+        annotations from the reference to query data. This function will find the appropriate
+        reference dataset using the spreadsheet provided in the ImmunoPhenoData object. This
+        spreadsheet must contain all antibodies and antibody IDs that were used in that experiment.
+        For any antibodies in the spreadsheet that are not found in the database, a matching algorithm
+        is used to find the next best antibody instead. This level of matching can be
+        adjusted in the "parse_option" parameter. This function can be parallelized by specifying
+        the number of chunks to split the dataset and the number of cores. 
+
+        Args:
+            IPD (ImmunoPhenoData): ImmunoPhenoData object that must already contain the
+                normalized protein counts and a spreadsheet with all antibody IDs for each
+                antibody used in the experiment. 
+            idBTO (list, optional): list of tissue IDs used to restrict the
+                reference dataset. This is optional, but specifying a tissue will greatly
+                improve the accuracy of the annotations.
+            idExperiment (list, optional): list of experiment IDs to restrict
+                the reference dataset. This is optional, but specifying certain experiments
+                can greatly improve the accuracy of the annotations.
+            parse_option (int): level of strictness when searching
+                antibodies in the database. Levels are as follows:
+                    1: parse by clone ID and alias (default)
+                    2: parse by alias and antibody ID (most relaxed)
+                    3: parse by antibody ID (strictest)
+            rho (float): weight parameter to adjust the number of
+                cells or antibodies in the reference dataset. A small value of rho
+                will provide more cells and less antibodies. A large value of rho
+                will provide more antibodies and less cells. Defaults to 0.5.
+            population_size (int): the minimum number of cells needed to define 
+                a cell type population. This is used to downsample a large reference
+                dataset. Defaults to 50 cells as the minimum number to define a population.
+            k_find_nn (int): the number of nearest neighbors. Defaults to 40.
+            k_find_anchor (int): the number of neibhbors to find anchors. Defaults to 20.
+            k_filter_anchor (int): the number of nearest neighbors to find in the original data space.
+                Defaults to 40.
+            k_score_anchor (int): The number of neighbors to find anchors.
+                Fewer k_anchor should mean higher quality of anchors. Defaults to 30.
+            k_find_weights (int): the number of nearest anchors to use in correction. Defaults to 40.
+            k_transfer_matrix (int): the number of nearest anchors to use in correction. Defaults to 40.
+            c_transfer_matrix (float): a constant that controls the width of the Gaussian kernel. Defaults to 0.5.
+            mask_threshold (float): specifies threshold to discard query cells. Defaults to 0.75.
+            mask (bool): a boolean value to specify whether to discard 
+                query cells that don't have nearby reference cells. Defaults to True.
+            num_chunks (int): number of chunks to split the protein dataset for parallelization. Defaults to 1.
+            num_cores (int): number of cores used to run in parallel. Defaults to 1.
+
+        Returns:
+            ImmunoPhenoData: Returns ImmunoPhenoData object containing transferred annotations
+            accessible in the "labels" property of the new object.
+        """
+
         IPD_new = copy.deepcopy(IPD)
 
         # Check if reference query parameters have changed OR if the reference table is empty
@@ -1760,7 +1960,7 @@ class ImmunoPhenoDB_Connect:
         return temp_copy
 
     def filter_labels(self, 
-                      IPD,
+                      IPD: ImmunoPhenoData,
                       localization=False,               # Filtering step
                       merging=False,                    # Filtering step
                       distance_ratio=False,             # Filtering step
@@ -1771,7 +1971,37 @@ class ImmunoPhenoDB_Connect:
                       distance_ratio_threshold=2,       # Ratio threshold when filtering cells by NN distance ratios (D1/D2)
                       entropy_threshold=2,              # Entropy threshold when filtering cells by total entropy for cell types
                       remove_labels=False):             # Remove cells as "Not Assigned" at the end of filtering:             
-        
+        """Filters out poor-quality annotations using the protein expression space
+
+        Args:
+            IPD (ImmunoPhenoData): ImmunoPhenoData object that contains cell labels in the
+                "labels" property of the object. 
+            localization (bool): option to filter annotations by the localization
+                of annotations in the protein expression space.
+            merging (bool): option to merge two annotations that cannot be separate in the
+                protein expression space. 
+            distance_ratio (bool): option to filter annotations by a mapping distance ratio
+                calculated from the nearest neighbors in the reference data. 
+            entropy (bool): option to filter annotations by entropy caluclated from 
+                cell type probabilities for each cell.
+            p_threshold_localization (float): p value threshold for fisher exact test
+                during localization filtering. 
+            p_threshold_merging (float): p value threshold for fisher exact test when
+                merging two annotations. 
+            epsilon_merging (int): epsilon threshold for deciding to merge two cell types
+                based on the proportion of each cell type.
+            distance_ratio_threshold (int): ratio threshold when filtering cells
+                by nearest neighbor distance ratios (D1/D2).
+            entropy_threshold (int): entropy threhold when filtering cells by entropies
+                calculated from cell type probabilities.
+            remove_labels (bool): option to remove rows/cells from the object that are
+                labeled as "Not Assigned" after filtering.
+
+        Returns:
+            ImmunoPhenoData: Returns ImmunoPhenoData object that contain modified cell labels.
+            These could be "Not Assigned" or two labels merged together. This object could also 
+            have rows/cells filtered out.
+        """
         # Ensure at least one of the filtering steps is enabled
         if not (localization or merging or distance_ratio or entropy):
             raise ValueError("At least one of 'localization', 'merging', 'distance_ratio', or 'entropy' must be set to True.")
@@ -1837,6 +2067,14 @@ class ImmunoPhenoDB_Connect:
         return IPD_new
     
     def db_stats(self):
+        """Prints summary statistics about the experiments and data stored in the database
+
+        Returns:
+            None. Prints statistics about the information stored in the database.
+            This includes: number of experiments, tissues, cells, antibodies, antibody targets,
+            antibody clones, and the average number of experiments used by each antibody.
+        
+        """
         stats_res = requests.get(f"{self.url}/api/databasestatistics")  
         if 'text/html' in stats_res.headers.get('content-type'):
             raise Exception(stats_res.text)
