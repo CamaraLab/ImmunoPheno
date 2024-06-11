@@ -1441,7 +1441,7 @@ class ImmunoPhenoData:
             Format: Row (cells) x column (cell type such as Cell Ontology ID). Must contain 
             a column called "labels".
         spreadsheet (str): name of csv file containing a spreadsheet with
-            information about the experiment and antibodies. Used for uploading data to a database.
+            information about the experiment and antibodies.
         scanpy (anndata.AnnData): scanpy AnnData object used to load in protein and gene data.
         scanpy_labels (str): location of cell labels inside a scanpy object. 
             Format: scanpy is an AnnData object containing an 'obs' field
@@ -1571,7 +1571,7 @@ class ImmunoPhenoData:
 
         Returns:
             ImmunoPhenoData: ImmunoPhenoData object with modified dataframes 
-                based on provided rows/cells names
+            based on provided rows/cells names.
         """
         if isinstance(index, list):
             index = pd.Index(index)
