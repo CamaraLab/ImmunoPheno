@@ -3,9 +3,9 @@ import pandas as pd
 import numpy as np
 
 from src.immunopheno.data_processing import (
-    _clean_adt,
-    _clean_rna,
-    _clean_labels,
+    _load_adt,
+    _load_rna,
+    _load_labels,
     _log_transform,
     _arcsinh_transform,
     _conv_np_mode,
@@ -61,37 +61,37 @@ def nb_fit():
                 'nb_p_params': [0.70, 0.99, 0.93],
                 'nb_thetas': [0.25, 0.48]}}
 
-def test_clean_adt():
+def test_load_adt():
     # Arrange
     count_matrix = pd.DataFrame(index=['Antibody'], columns=['Cell'])
-    expected = count_matrix.T
+    expected = count_matrix
 
     # Act
-    output = _clean_adt(count_matrix)
+    output = _load_adt(count_matrix)
 
     # Assert
     assert output.index == expected.index
     assert output.columns == expected.columns
 
-def test_clean_rna():
+def test_load_rna():
     # Arrange
     gene_matrix = pd.DataFrame(index=['Gene'], columns=['Cell'])
-    expected = gene_matrix.T
+    expected = gene_matrix
 
     # Act
-    output = _clean_rna(gene_matrix)
+    output = _load_rna(gene_matrix)
 
     # Assert
     assert output.index == expected.index
     assert output.columns == expected.columns
 
-def test_clean_labels():
+def test_load_labels():
     # Arrange
     label_matrix = pd.DataFrame(data=[['cell1', 'NK'], ['cell2', 'B']])
     expected_index = label_matrix.iloc[:, 0]
 
     # Act
-    output = _clean_labels(label_matrix)
+    output = _load_labels(label_matrix)
 
     # Assert
     assert list(output.index) == list(expected_index)

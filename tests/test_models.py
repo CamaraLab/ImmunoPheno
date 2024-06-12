@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 
 from src.immunopheno.models import (
-    plot_fits,
+    _plot_fits,
     plot_all_fits,
     _gmm_init_params,
     _gmm_results,
@@ -49,7 +49,7 @@ def test_plot_fits(mocker, example_fit_results):
     mock_plots = mocker.patch("src.immunopheno.models.plt.show")
     
     # Act
-    plot_fits(counts, example_fit_results)
+    _plot_fits(counts, example_fit_results)
 
     # Assert
     mock_plots.assert_called_once()
@@ -60,7 +60,7 @@ def test_plot_all_fits(mocker, example_fit_results):
     mock_IPD.protein = pd.DataFrame({'ab1': [153, 235, 4, 2]})
     mock_IPD._all_fits = [example_fit_results]
 
-    mock_all_plots = mocker.patch("src.immunopheno.models.plot_fits")
+    mock_all_plots = mocker.patch("src.immunopheno.models._plot_fits")
 
     # Act
     plot_all_fits(mock_IPD)
