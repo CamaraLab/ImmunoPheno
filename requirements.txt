@@ -16,6 +16,7 @@ netgraph==4.12.11
 tqdm==4.65.0
 scanpy==1.9.5
 ipywidgets==8.0.6
+requests
 
 contourpy==1.2.0
 cycler==0.12.1
