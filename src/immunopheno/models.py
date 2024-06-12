@@ -521,7 +521,7 @@ def _gmm_results(counts: list,
                                  key=lambda item: item[1]['aic']))
 
     if plot:
-        plot_fits(counts=counts,
+        _plot_fits(counts=counts,
                   fit_results=sorted_results,
                   ab_name=ab_name)
         
@@ -979,7 +979,7 @@ def _nb_mle_results(counts: list,
     sorted_results = dict(sorted(results.items(), 
                                  key=lambda item: item[1]['aic']))
     if plot:
-        plot_fits(counts=counts,
+        _plot_fits(counts=counts,
                   fit_results=sorted_results,
                   ab_name=ab_name)
 
