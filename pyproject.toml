@@ -54,6 +54,7 @@ dependencies = [
     "texttable==1.7.0",
     "threadpoolctl==3.2.0",
     "tzdata==2023.3",
+    "pydot==2.0.0",
 	]
 
 [tool.pytest.ini_options]

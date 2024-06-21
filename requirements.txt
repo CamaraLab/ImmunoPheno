@@ -41,3 +41,5 @@ tenacity==8.2.3
 texttable==1.7.0
 threadpoolctl==3.2.0
 tzdata==2023.3
+
+pydot==2.0.0
