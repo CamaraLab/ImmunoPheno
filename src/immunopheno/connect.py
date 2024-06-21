@@ -20,11 +20,14 @@ from netgraph import Graph
 
 from sklearn.impute import KNNImputer
 from .stvea_controller import Controller
+from .dt_cart import CART
 import math
 import scipy
 import copy
 from importlib.resources import files
 from scipy.stats import entropy
+from sklearn.tree import export_graphviz
+import pydot
 
 def _update_cl_owl():
     warnings.filterwarnings("ignore")
@@ -238,16 +241,13 @@ def _convert_idCL_readable(idCL:str) -> str:
     return cellType
 
 def _convert_ab_readable(ab_id:str):
-    try:
-        res = requests.get("http://www.scicrunch.org" + "/resolver/" + ab_id + ".json")
-        res_JSON = res.json()
-        ab_name = (res_JSON['hits']['hits'][0]
-                        ['_source']['antibodies']['primary'][0]
-                        ['targets'][0]['name'])
-        return ab_name
-    except:
-        return ""
-
+    res = requests.get("http://www.scicrunch.org" + "/resolver/" + ab_id + ".json")
+    res_JSON = res.json()
+    ab_name = (res_JSON['hits']['hits'][0]
+                    ['_source']['antibodies']['primary'][0]
+                    ['targets'][0]['name'])
+    return ab_name
+    
 def _plot_antibodies_graph(idCL: str,
                           getAbs_df: pd.DataFrame,
                           plot_df: pd.DataFrame) -> go.Figure():
@@ -297,11 +297,11 @@ def _plot_antibodies_graph(idCL: str,
 def _plot_celltypes_graph(ab_id: str,
                          getct_df: pd.DataFrame,
                          plot_df: pd.DataFrame) -> go.Figure():
-    ab_readable = _convert_ab_readable(ab_id)
-    if ab_readable == "":
-        title = ab_id
-    else:
+    try:
+        ab_readable = _convert_ab_readable(ab_id)
         title = f"{ab_readable} ({ab_id})"
+    except:
+        title = ab_id
     
     celltypes = list(getct_df.index) # antibodies to send to endpoint
     
@@ -1027,6 +1027,7 @@ class ImmunoPhenoDB_Connect:
         self._last_stvea_params = None
         self._downsample_pairwise_graph = None
         self._nn_dist = None
+        self._antibody_panel_imputed_reference = None
 
         if self.url is None:
             raise Exception("Error. Server URL must be provided")
@@ -2089,3 +2090,166 @@ class ImmunoPhenoDB_Connect:
         print("Number of antibody targets:", stats_JSON["num_targets"])
         print("Number of antibody clones:", stats_JSON["num_clones"])
         print("Average number of experiments per antibody:", "{:.2f}".format(stats_JSON["avg_exp"]))
+
+    def _antibody_panel(self,
+                        target: list, 
+                        background: list = None,
+                        tissue: list = None,
+                        experiment: list = None) -> dict: 
+                
+        # Client side sanitization
+        if len(target) == 0:
+            raise Exception("Error. Target must be provided")
+
+        if experiment is None:
+            experiment = []
+            
+        # Isolate out the "CL:" and "BTO:" from the target list
+        target_idCLs = []
+        target_idBTOs = []
+        for element in target:
+            if element.startswith("CL:"):
+                target_idCLs.append(element)
+            elif element.startswith("BTO:"):
+                target_idBTOs.append(element)
+
+        # For each idCL in target, find all of their descendants.
+        # Store this in a list initially, then take the set() of them to get the unique idCLs
+        target_node_fam_dict = self._find_descendants(target_idCLs)
+        target_parents = list(target_node_fam_dict.keys())
+        target_children = [item for sublist in list(target_node_fam_dict.values()) for item in sublist]
+        target_family = target_parents + target_children
+        unique_target_family_idCLs = list(set(target_family))           
+
+        # Deal with background if specified, make a second query call              
+        # Isolate out the "CL:" and "BTO:" from the background list
+        background_idCLs = [] 
+        background_idBTOs = [] 
+        modified_background_family_idCLs = [] 
+        modified_background_family_idBTOs = []
+        
+        if background is not None and len(background) > 0:
+            for element in background:
+                if element.startswith("CL:"):
+                    background_idCLs.append(element)
+                elif element.startswith("BTO:"):
+                    background_idBTOs.append(element)
+        
+            # Step: Repeat, but this time for the background idCLs
+            background_node_fam_dict = self._find_descendants(background_idCLs)
+            background_parents = list(background_node_fam_dict.keys())
+            background_children = [item for sublist in list(background_node_fam_dict.values()) for item in sublist]
+            background_family = background_parents + background_children
+            unique_background_family_idCLs = list(set(background_family))
+        
+            # Step: Target list always has greater priority than background. Remove any values from
+            # background that were listed in target. This goes for the idCLs and the tissues.
+            for element in unique_background_family_idCLs:
+                if element not in unique_target_family_idCLs:
+                    modified_background_family_idCLs.append(element)
+                    
+            for element in background_idBTOs:
+                if element not in target_idBTOs:
+                    modified_background_family_idBTOs.append(element)
+
+        # Step 6: Tissue filter list has the HIGHEST priority over the target and the background. 
+        # Filter out any tissues from both target/background lists that were not found in the tissue filter list.
+        if tissue is not None and len(tissue) > 0:
+            if target is not None and len(target) > 0:
+                final_target_idBTOs = tissue.copy()
+            else:
+                final_target_idBTOs = []
+
+            if background is not None and len(background) > 0:
+                final_background_idBTOs = tissue.copy()
+            else:
+                final_background_idBTOs = []
+                
+            for element in tissue:
+                if element in target_idBTOs:
+                    final_target_idBTOs.append(element)
+        
+                if element in modified_background_family_idBTOs:
+                    final_background_idBTOs.append(element)
+                    
+            final_target_idBTOs = list(set(final_target_idBTOs))
+            final_background_idBTOs = list(set(final_background_idBTOs))
+        else: # we do no filtering
+            final_target_idBTOs = target_idBTOs
+            final_background_idBTOs = modified_background_family_idBTOs
+
+        # JSON payload will have 5 parts as lists
+        antibody_panel_payload = {
+            "target_idcl": unique_target_family_idCLs,
+            "target_idbto": final_target_idBTOs,
+            "background_idcl": modified_background_family_idCLs,
+            "background_idbto": final_background_idBTOs,
+            "experiment": experiment
+        }
+
+        print("Retrieving antibody panel reference data...")
+        abPanel_response = requests.post(f"{self.url}/api/antibodypanelreference", json=antibody_panel_payload)
+        if 'text/html' in abPanel_response.headers.get('content-type'):
+            raise Exception(abPanel_response.text)
+        elif 'application/json' in abPanel_response.headers.get('content-type'):
+            res_JSON = abPanel_response.json()
+            res_df = pd.DataFrame.from_dict(res_JSON)
+                        
+        # Keep track of cells originally marked as background
+        background_cells_to_relabel = res_df[res_df['background'] == True].index
+        res_df_no_background_column = res_df.drop(columns=["background"], inplace=False)
+
+        # Impute missing values in
+        print("Imputing missing values...")
+        imputed_ab_panel = _impute_dataset_by_type(res_df_no_background_column, rho=0.5)
+        # Re-assign background cells earlier as "Other" for their cell type
+        indices_to_update = imputed_ab_panel.index.intersection(background_cells_to_relabel)
+        imputed_ab_panel.loc[indices_to_update, 'idCL'] = "Other"
+
+        # After sending payload to API endpoint, retrieve the dataframe back 
+        return imputed_ab_panel  # store this in the class somewhere
+
+    def optimal_antibody_panel(self,
+                               target: list,
+                               background: list = None,
+                               tissue: list = None,
+                               experiment: list = None,
+                               panel_size: int = 10,
+                               max_itr: int = 1000,
+                               random_state: int = 0,
+                               plot_decision_tree: bool = False,
+                               plot_gates: bool = False) -> pd.DataFrame:
+                               
+        # Retrieve reference dataset
+        imputed_ab_panel = self._antibody_panel(target=target,
+                                                background=background,
+                                                tissue=tissue,
+                                                experiment=experiment)
+                                
+        normalized_counts = imputed_ab_panel.loc[:, imputed_ab_panel.columns != 'idCL']
+        idCLs = pd.DataFrame(imputed_ab_panel["idCL"])
+                            
+        # Create CART object
+        cart = CART(data=normalized_counts, label=idCLs)
+
+        # Create decision tree
+        cart.generate_tree2(k=panel_size, max_itr=max_itr, random_state=random_state)
+
+        # Retrieve top features (optimal antibodies)
+        optimal_ab = cart.feature_importance
+
+        if plot_decision_tree:
+            dot_data = export_graphviz(cart.tree, out_file="tree.dot",
+                            feature_names=cart.tree.feature_names_in_,
+                            class_names=cart.tree.classes_.astype(str),
+                            filled=True,
+                            rounded=True, special_characters=True)
+
+            (graph,) = pydot.graph_from_dot_file('tree.dot')
+            graph.write_png('decision_tree.png')
+
+        if plot_gates:
+            cart.generate_gating_plot(noise=False, plot_option=1)
+            
+        return optimal_ab
+    
