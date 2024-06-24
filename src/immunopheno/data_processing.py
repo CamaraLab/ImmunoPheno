@@ -2081,9 +2081,8 @@ class ImmunoPhenoData:
                                                 self._protein_matrix)
 
         # Filter from cell labels if dealing with single cell data
-        if self._cell_labels is not None:
-
-            # Update any of the raw_cell_labels that were changed earlier. We don't remove any rows here, just update
+        if self._cell_labels is not None and self._cell_labels_filt_df is not None:
+            # Update the raw cell labels to only contain labels/cells from the norm labels
             common_indices = self._cell_labels.index.intersection(self._cell_labels_filt_df.index)
             # Check for indices in raw_cell_labels that will be updated
             if not common_indices.empty:
