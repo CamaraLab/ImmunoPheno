@@ -1681,8 +1681,10 @@ class ImmunoPhenoData:
             self._raw_umap = None
             self._norm_umap = None
             try:
+                temp_norm_labels = self._cell_labels_filt_df.loc[common_indices, ['labels', 'celltype']].copy(deep=True)
+                self._cell_labels = temp_norm_labels 
                 # Update the rows in the raw_cell_labels to reflect the annotations in the norm_cell_labels
-                self._cell_labels.loc[common_indices, ['labels', 'celltype']] = self._cell_labels_filt_df.loc[common_indices, ['labels', 'celltype']]
+                #self._cell_labels.loc[common_indices, ['labels', 'celltype']] = self._cell_labels_filt_df.loc[common_indices, ['labels', 'celltype']]
             except Exception as e:
                 print(f"An error occurred during the update: {e}")
         else:
@@ -1716,8 +1718,12 @@ class ImmunoPhenoData:
 
                 # Check if normalized cell types exist. If so, repeat above
                 if self.labels is not None and isinstance(self.labels, pd.DataFrame):
+                    # Need to make a new labels map
+                    temp_norm_df = self._cell_labels_filt_df.copy(deep=True)
+                    norm_labels_map = _ebi_idCL_map(temp_norm_df)
+
                     norm_temp_df = self.labels.copy(deep=True)
-                    norm_temp_df['celltype'] = norm_temp_df['labels'].map(labels_map)
+                    norm_temp_df['celltype'] = norm_temp_df['labels'].map(norm_labels_map)
 
                     # Ensure all "labels" follow the format of "CL:XXXXXXX"
                     norm_temp_df["labels"] = norm_temp_df["labels"].str.replace(r'^CL_([0-9]+)$', r'CL:\1')
@@ -2075,7 +2081,12 @@ class ImmunoPhenoData:
                                                 self._protein_matrix)
 
         # Filter from cell labels if dealing with single cell data
-        if self._cell_labels is not None:
+        if self._cell_labels_filt_df is not None: # First check if normalized labels exist
+            norm_cell_labels_filt = _filter_cell_labels(classified_cells_filt,
+                                                        self._cell_labels_filt_df)
+            self._cell_labels_filt_df = norm_cell_labels_filt
+
+        elif self._cell_labels is not None:
             cell_labels_filt = _filter_cell_labels(classified_cells_filt,
                                                         self._cell_labels)
             self._cell_labels_filt_df = cell_labels_filt # this will replace the norm label field directly
@@ -2104,7 +2115,7 @@ class ImmunoPhenoData:
         if self._gene_matrix is not None and self._cell_labels is not None:
             df_by_type = _z_avg_umi_sum_by_type(background_z_scores,
                                                 self._gene_matrix,
-                                                cell_labels_filt)
+                                                self._cell_labels_filt_df)
 
             lin_reg_type = _linear_reg_by_type(df_by_type)
             self._linear_reg_df = lin_reg_type
@@ -2116,7 +2127,7 @@ class ImmunoPhenoData:
                                     p_threshold=p_threshold,
                                     background_cell_z_score=bg_cell_z_score,
                                     classified_filt_df=classified_cells_filt,
-                                    cell_labels_filt_df=cell_labels_filt,
+                                    cell_labels_filt_df=self._cell_labels_filt_df,
                                     lin_reg_dict=lin_reg_type,
                                     cumulative=cumulative)
 
