@@ -1516,6 +1516,7 @@ class ImmunoPhenoData:
                     labels = scanpy.obs[scanpy_labels]
                     # Load these labels into the class
                     self._cell_labels = pd.DataFrame(labels)
+                    self._cell_labels_filt_df = pd.DataFrame(labels)
                     self._temp_labels = self._cell_labels.copy(deep=True)
                 except:
                     raise Exception("Field not found in scanpy object")
