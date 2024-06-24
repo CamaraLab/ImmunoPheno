@@ -2081,14 +2081,20 @@ class ImmunoPhenoData:
                                                 self._protein_matrix)
 
         # Filter from cell labels if dealing with single cell data
-        if self._cell_labels_filt_df is not None: # First check if normalized labels exist
-            norm_cell_labels_filt = _filter_cell_labels(classified_cells_filt,
-                                                        self._cell_labels_filt_df)
-            self._cell_labels_filt_df = norm_cell_labels_filt
+        if self._cell_labels is not None:
 
-        elif self._cell_labels is not None:
+            # Update any of the raw_cell_labels that were changed earlier. We don't remove any rows here, just update
+            common_indices = self._cell_labels.index.intersection(self._cell_labels_filt_df.index)
+            # Check for indices in raw_cell_labels that will be updated
+            if not common_indices.empty:
+                # Reset the UMAPs
+                self._raw_umap = None
+                self._norm_umap = None
+                self._cell_labels.loc[common_indices, ['labels', 'celltype']] = self._cell_labels_filt_df.loc[common_indices, ['labels', 'celltype']]
+                
             cell_labels_filt = _filter_cell_labels(classified_cells_filt,
                                                         self._cell_labels)
+            
             self._cell_labels_filt_df = cell_labels_filt # this will replace the norm label field directly
 
         # Calculate z scores for all values
