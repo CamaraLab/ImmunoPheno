@@ -1681,7 +1681,7 @@ class ImmunoPhenoData:
             self._raw_umap = None
             self._norm_umap = None
             try:
-                temp_norm_labels = self._cell_labels_filt_df.loc[common_indices, ['labels', 'celltype']].copy(deep=True)
+                temp_norm_labels = (self._cell_labels_filt_df.loc[common_indices]).copy(deep=True)
                 self._cell_labels = temp_norm_labels 
                 # Update the rows in the raw_cell_labels to reflect the annotations in the norm_cell_labels
                 #self._cell_labels.loc[common_indices, ['labels', 'celltype']] = self._cell_labels_filt_df.loc[common_indices, ['labels', 'celltype']]
@@ -1707,29 +1707,29 @@ class ImmunoPhenoData:
                 labels_map = _ebi_idCL_map(self._cell_labels)
 
                 # Map all values from dictionary back onto the "celltype" field
-                temp_df = self._cell_labels.copy(deep=True)
-                temp_df['celltype'] = temp_df['labels'].map(labels_map)
+                # temp_df = self._cell_labels.copy(deep=True)
+                self._cell_labels['celltype'] = self._cell_labels['labels'].map(labels_map)
 
                 # Ensure all "labels" follow the format of "CL:XXXXXXX"
-                temp_df["labels"] = temp_df["labels"].str.replace(r'^CL_([0-9]+)$', r'CL:\1')
+                self._cell_labels["labels"] = self._cell_labels["labels"].str.replace(r'^CL_([0-9]+)$', r'CL:\1')
                 
                 # Set new table
-                self._cell_labels = temp_df
+                # self._cell_labels = temp_df
 
                 # Check if normalized cell types exist. If so, repeat above
                 if self.labels is not None and isinstance(self.labels, pd.DataFrame):
                     # Need to make a new labels map
-                    temp_norm_df = self._cell_labels_filt_df.copy(deep=True)
-                    norm_labels_map = _ebi_idCL_map(temp_norm_df)
+                    # temp_norm_df = self._cell_labels_filt_df.copy(deep=True)
+                    norm_labels_map = _ebi_idCL_map(self._cell_labels_filt_df)
 
-                    norm_temp_df = self.labels.copy(deep=True)
-                    norm_temp_df['celltype'] = norm_temp_df['labels'].map(norm_labels_map)
+                    # norm_temp_df = self.labels.copy(deep=True)
+                    self._cell_labels_filt_df['celltype'] = self._cell_labels_filt_df['labels'].map(norm_labels_map)
 
                     # Ensure all "labels" follow the format of "CL:XXXXXXX"
-                    norm_temp_df["labels"] = norm_temp_df["labels"].str.replace(r'^CL_([0-9]+)$', r'CL:\1')
+                    self._cell_labels_filt_df["labels"] = self._cell_labels_filt_df["labels"].str.replace(r'^CL_([0-9]+)$', r'CL:\1')
 
                     # Set new table
-                    self._cell_labels_filt_df = norm_temp_df
+                    # self._cell_labels_filt_df = norm_temp_df
             else:
                 raise Exception("Table does not contain 'labels' column")
         else:
