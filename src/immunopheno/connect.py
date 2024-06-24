@@ -2238,6 +2238,18 @@ class ImmunoPhenoDB_Connect:
         # Retrieve top features (optimal antibodies)
         optimal_ab = cart.feature_importance
 
+        # Add readable cell type names to tree classes prior to plot generation
+        modified_class_names = []
+        for name in cart.tree.classes_:
+            if name.startswith("CL:"):
+                # Get readable name
+                readable = _convert_idCL_readable(name)
+                new_name = readable + f" ({name})"
+                modified_class_names.append(new_name)
+            else:
+                modified_class_names.append(name)
+        cart.tree.classes_ = np.array(modified_class_names)
+
         if plot_decision_tree:
             dot_data = export_graphviz(cart.tree, out_file="tree.dot",
                             feature_names=cart.tree.feature_names_in_,
