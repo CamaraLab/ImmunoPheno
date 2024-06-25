@@ -1667,14 +1667,11 @@ class ImmunoPhenoData:
     
     @labels.setter
     def labels(self, value: pd.DataFrame) -> None:
-        if self._cell_labels is None and self._cell_labels_filt_df is None:
-            self._cell_labels = value
-            self._cell_labels_filt_df = value
-
+        self._cell_labels_filt_df = value #  Change the norm_cell_labels
         # If the cells in 'value' are found in the original table, update those rows too
-        common_indices = self._cell_labels.index.intersection(value.index)
-        # Check for missing rows in new table that should have been updated in original labels
-        missing_indices = value.index.difference(self._cell_labels.index)
+        common_indices = self._cell_labels.index.intersection(self._cell_labels_filt_df.index)
+        # Check for missing rows in new table that should be updated in original labels
+        missing_indices = self._cell_labels_filt_df.index.difference(self._cell_labels.index)
 
         if not missing_indices.empty:
             print(f"Warning: The following rows were not found in the original protein dataset and will be ignored: {missing_indices.tolist()}")
@@ -1685,10 +1682,10 @@ class ImmunoPhenoData:
             self._raw_umap = None
             self._norm_umap = None
             try:
-                # Update norm cell labels first. Only the cells found in both original dataset and new dataframe are considered
-                self._cell_labels_filt_df[common_indices, ['labels', 'celltype']] = value[common_indices, ['labels', 'celltype']]
+                temp_norm_labels = (self._cell_labels_filt_df.loc[common_indices]).copy(deep=True)
+                self._cell_labels = temp_norm_labels 
                 # Update the rows in the raw_cell_labels to reflect the annotations in the norm_cell_labels
-                self._cell_labels.loc[common_indices, ['labels', 'celltype']] = self._cell_labels_filt_df.loc[common_indices, ['labels', 'celltype']]
+                #self._cell_labels.loc[common_indices, ['labels', 'celltype']] = self._cell_labels_filt_df.loc[common_indices, ['labels', 'celltype']]
             except Exception as e:
                 print(f"An error occurred during the update: {e}")
         else:
