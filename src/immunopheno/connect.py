@@ -2225,7 +2225,10 @@ class ImmunoPhenoDB_Connect:
                                                 background=background,
                                                 tissue=tissue,
                                                 experiment=experiment)
-                                
+        # Apply stvea_correction value
+        self._antibody_panel_imputed_reference = imputed_ab_panel.copy(deep=True).applymap(
+                    lambda x: x - 9 if (x != 0 and type(x) is not str) else x)
+        
         normalized_counts = imputed_ab_panel.loc[:, imputed_ab_panel.columns != 'idCL']
         idCLs = pd.DataFrame(imputed_ab_panel["idCL"])
                             
