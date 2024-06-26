@@ -55,6 +55,7 @@ dependencies = [
     "threadpoolctl==3.2.0",
     "tzdata==2023.3",
     "pydot==2.0.0",
+    "hdbscan==0.8.33",
 	]
 
 [tool.pytest.ini_options]
