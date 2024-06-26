@@ -26,9 +26,9 @@ jupyter notebook
 
 ## Docker image
 We provide a Docker image that contains ImmunoPheno and its dependencies. Running the following command will launch 
-a Jupyter notebook server on localhost with CAJAL and its dependencies installed:
+a Jupyter notebook server on localhost with ImmunoPheno and its dependencies installed:
 ```commandline
-docker run -it -p 8888:8888 -v C:\Users\myusername\Documents\myfolder:/home/jovyan/work camaralab/python3:immunopheno
+docker run -it -p 8888:8888 -p 8050:8050 -v C:\Users\myusername\Documents\myfolder:/home/jovyan/work camaralab/python3:immunopheno
 ```
 The ```-p``` flag controls the port number on local host. For example, writing ```-p 4264:8888``` will let you access 
 the Jupyter server from 127.0.0.1:4264. The ```-v``` "bind mount" flag allows one to mount a local directory on the 
