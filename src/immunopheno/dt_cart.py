@@ -15,11 +15,11 @@ import plotly.offline as pyo
 import plotly.graph_objects as go
 import plotly.express as px
 import plotly.figure_factory as ff
-# import dash
-# from dash import html
-# from dash import dcc
-# import dash_bootstrap_components as dbc
-# from dash.dependencies import Input, Output
+import dash
+from dash import html
+from dash import dcc
+import dash_bootstrap_components as dbc
+from dash.dependencies import Input, Output
 
 
 class PlotNode:
@@ -1178,8 +1178,10 @@ class CART(Algo):
         elif plot_option == 2:
             self.interactive_gating_plot(y_length, x_length, tree, plot_tree, noise)
         elif plot_option == 3:
+            print("Please visit http://127.0.0.1:8050 to view the plot")
             app = self.create_dash_gating_plot_app(y_length, x_length, tree, plot_tree, noise)
-            app.run_server(debug=False)
+            app.run_server(mode='inline', host="0.0.0.0", port = 8050, dev_tools_ui=True, debug=False,
+              dev_tools_hot_reload =True, threaded=True)
 
     def __init__(self, data, label):
 
