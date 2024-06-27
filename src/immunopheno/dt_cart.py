@@ -1180,7 +1180,7 @@ class CART(Algo):
         elif plot_option == 3:
             print("Please visit http://127.0.0.1:8050 to view the plot")
             app = self.create_dash_gating_plot_app(y_length, x_length, tree, plot_tree, noise)
-            app.run(host="0.0.0.0", port=8050, debug=False)
+            app.run(jupyter_mode="_none", host="0.0.0.0", port=8050, debug=False)
 
     def __init__(self, data, label):
 
