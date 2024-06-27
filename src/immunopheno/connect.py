@@ -1693,10 +1693,6 @@ class ImmunoPhenoDB_Connect:
         return IPD_new
 
     def _part1_localization(self, IPD, p_threshold=0.05):
-        """
-        Remove: the option to either remove cells completely from the object after filtering
-                OR set it to "Not Assigned" instead in the cell annotations
-        """
         # We will be working with the normalized_counts and labels in the IPD object
         # First, we will need to ignore all initial cells labeled as "Not Assigned"
         filtered_index = IPD.labels[IPD.labels['labels'] != 'Not Assigned'].index
@@ -2218,7 +2214,42 @@ class ImmunoPhenoDB_Connect:
                                max_itr: int = 1000,
                                random_state: int = 0,
                                plot_decision_tree: bool = False,
-                               plot_gates: bool = False) -> pd.DataFrame:
+                               plot_gates: bool = False,
+                               plot_gates_option: int = 1) -> pd.DataFrame:
+        """Finds an optimized panel of antibodies to mark cell populations and tissues
+
+        Uses reference data stored in the ImmunoPhenoDB database to generate a panel
+        of antibodies that are marked by the specified cell populations and tissue types. This
+        function uses a k-feature decision tree to extract the most optimal antibodies
+        that can mark the desired populations and tissue. There is an option to save the
+        decision tree generated. There is also the option to display suggested flow cytometry
+        gating plots using the antibodies in the optimized panel. 
+         
+        Args:
+            target (list): list of cell populations and/or tissues to query as the target
+                for antibodies in the panel. This must use cell ontology IDs and BRENDA tissue ontology IDs. 
+                Example: ["CL:0000084", "CL:0000236"]
+            background (list, optional): list of cell populations and/or tissues used as comparison. These
+                will be used to differentiate the target from these background populations/tissues.
+                Example: ["BTO:0001025"]
+            tissue (list, optional): list of BRENDA tissue ontologies to restrict the entire query.
+            experiment (list, optional): list of experiment IDs from the database to restrict the entire query. 
+            panel_size (int): desired number of antibodies in the panel. Defaults to 10.
+            max_itr (int, optional): number of iterations in the decision tree. Defaults to 1000.
+            random_state (int, optional): random state for the decision tree classifier. Defaults to 0.
+            plot_decision_tree (bool, optional): option to plot and save the decision tree.
+                This will create two files in the current directory: "tree.dot" and "decision_tree.png". Defaults to False.
+            plot_gates (bool, optional): option to display suggested gating strategies. Defaults to False.
+            plot_gates_option (int, optional): type of plot generated.
+                "1": displays a static plot using seaborn.
+                "2": displays an interactive plot using Plotly. Creates a file called "multiple_plots.html"
+                "3": displays an interactive plot using Dash. Must be viewed in a browser at 127.0.0.1:8050
+                Defaults to 1. 
+
+        Returns:
+            pd.DataFrame: Returns a dataframe containing a list of antibodies ranked by their importance.
+            This includes the specific antibody ID and the protein that the antibody marks for.
+        """
                                
         # Retrieve reference dataset
         imputed_ab_panel = self._antibody_panel(target=target,
@@ -2229,8 +2260,8 @@ class ImmunoPhenoDB_Connect:
         self._antibody_panel_imputed_reference = imputed_ab_panel.copy(deep=True).applymap(
                     lambda x: x - 9 if (x != 0 and type(x) is not str) else x)
         
-        normalized_counts = imputed_ab_panel.loc[:, imputed_ab_panel.columns != 'idCL']
-        idCLs = pd.DataFrame(imputed_ab_panel["idCL"])
+        normalized_counts = self._antibody_panel_imputed_reference.loc[:, self._antibody_panel_imputed_reference.columns != 'idCL']
+        idCLs = pd.DataFrame(self._antibody_panel_imputed_reference["idCL"])
                             
         # Create CART object
         cart = CART(data=normalized_counts, label=idCLs)
@@ -2264,7 +2295,7 @@ class ImmunoPhenoDB_Connect:
             graph.write_png('decision_tree.png')
 
         if plot_gates:
-            cart.generate_gating_plot(noise=False, plot_option=1)
+            cart.generate_gating_plot(noise=False, plot_option=plot_gates_option)
             
         return optimal_ab
     
