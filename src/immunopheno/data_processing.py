@@ -1512,9 +1512,14 @@ class ImmunoPhenoData:
             if scanpy_labels is not None:
                 try:
                     labels = scanpy.obs[scanpy_labels]
-                    # Load these labels into the class
-                    self._cell_labels = pd.DataFrame(labels)
-                    self._cell_labels_filt_df = pd.DataFrame(labels)
+                    # Load these labels into the class. Create a dataframe that has "labels" and "celltype"
+                    singleR_labels = pd.DataFrame(labels)
+                    original_column_name = singleR_labels.columns[0]
+                    singleR_labels['celltype'] = singleR_labels[original_column_name]
+                    singleR_labels.rename(columns={original_column_name: 'labels'}, inplace=True)
+
+                    self._cell_labels = singleR_labels
+                    self._cell_labels_filt_df = singleR_labels
                     self._temp_labels = self._cell_labels.copy(deep=True)
                 except:
                     raise Exception("Field not found in scanpy object")
@@ -2088,7 +2093,7 @@ class ImmunoPhenoData:
                 # Reset the UMAPs
                 self._raw_umap = None
                 self._norm_umap = None
-                self._cell_labels.loc[common_indices, ['labels', 'celltype']] = self._cell_labels_filt_df.loc[common_indices, ['labels', 'celltype']]
+                self._cell_labels.loc[common_indices] = self._cell_labels_filt_df.loc[common_indices]
                 
             cell_labels_filt = _filter_cell_labels(classified_cells_filt,
                                                         self._cell_labels)
