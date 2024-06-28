@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
-import PySimpleGUI as sg
+# import PySimpleGUI as sg
 from .stvea_class import STvEA
 
 class Annotation:

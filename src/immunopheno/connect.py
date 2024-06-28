@@ -1,33 +1,33 @@
-import numpy as np
 import requests
-import urllib.parse
 import random
 import json
 import logging
 import warnings
+import copy
+import pydot
+from importlib.resources import files
+
+import math
+import scipy
 import pandas as pd
+import numpy as np
+from scipy.stats import entropy
+from sklearn.impute import KNNImputer
+from sklearn.tree import export_graphviz
 
 import plotly.express as px
 import plotly.graph_objects as go
+import matplotlib.pyplot as plt
+from netgraph import Graph
 
 import networkx as nx
 from networkx.exception import NetworkXError
 from nxontology.imports import from_file
 from networkx.algorithms.dag import dag_longest_path
-from .data_processing import ImmunoPhenoData
-import matplotlib.pyplot as plt
-from netgraph import Graph
 
-from sklearn.impute import KNNImputer
+from .data_processing import ImmunoPhenoData
 from .stvea_controller import Controller
 from .dt_cart import CART
-import math
-import scipy
-import copy
-from importlib.resources import files
-from scipy.stats import entropy
-from sklearn.tree import export_graphviz
-import pydot
 
 def _update_cl_owl():
     warnings.filterwarnings("ignore")
