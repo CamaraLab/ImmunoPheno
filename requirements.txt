@@ -17,6 +17,7 @@ nxontology
 tqdm
 dash
 dash-bootstrap-components
+nbformat
 
 scanpy
 anndata
