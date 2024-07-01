@@ -13,6 +13,7 @@ seaborn
 umap-learn
 networkx
 netgraph
+nxontology
 tqdm
 dash
 dash-bootstrap-components
