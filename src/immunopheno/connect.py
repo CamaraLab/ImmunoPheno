@@ -5,7 +5,9 @@ import logging
 import warnings
 import copy
 import pydot
+import pydotplus
 from importlib.resources import files
+from io import StringIO
 
 import math
 import scipy
@@ -2238,7 +2240,7 @@ class ImmunoPhenoDB_Connect:
             max_itr (int, optional): number of iterations in the decision tree. Defaults to 1000.
             random_state (int, optional): random state for the decision tree classifier. Defaults to 0.
             plot_decision_tree (bool, optional): option to plot and save the decision tree.
-                This will create two files in the current directory: "tree.dot" and "decision_tree.png". Defaults to False.
+                This will create one PNG in the current directory: "decision_tree.png". Defaults to False.
             plot_gates (bool, optional): option to display suggested gating strategies. Defaults to False.
             plot_gates_option (int, optional): type of plot generated.
                 "1": displays a static plot using seaborn.
@@ -2285,13 +2287,14 @@ class ImmunoPhenoDB_Connect:
         cart.tree.classes_ = np.array(modified_class_names)
 
         if plot_decision_tree:
-            dot_data = export_graphviz(cart.tree, out_file="tree.dot",
+            dot_data = StringIO()
+            export_graphviz(cart.tree, out_file=dot_data,
                             feature_names=cart.tree.feature_names_in_,
                             class_names=cart.tree.classes_.astype(str),
                             filled=True,
                             rounded=True, special_characters=True)
 
-            (graph,) = pydot.graph_from_dot_file('tree.dot')
+            graph = pydotplus.graph_from_dot_data(dot_data.getvalue())
             graph.write_png('decision_tree.png')
 
         if plot_gates:
