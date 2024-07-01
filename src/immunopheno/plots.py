@@ -50,6 +50,7 @@ def plot_filter_metrics(IPD: ImmunoPhenoData):
 
 def plot_UMAP(IPD: ImmunoPhenoData,
               normalized: bool = False,
+              force_update: bool = False,
               **kwargs):
     """ Plots a UMAP for the non-normalized protein values or normalized protein values
 
@@ -57,6 +58,7 @@ def plot_UMAP(IPD: ImmunoPhenoData,
         IPD (ImmunoPhenoData Object): object containing protein data,
             gene data, and cell types
         normalized (bool): option to plot normalized values
+        force_update (bool): option to compute a new UMAP, replacing stored plots
         **kwargs: various arguments to UMAP class constructor, including default values:
             n_neighbors (int): 15
             min_dist (float): 0.1 
@@ -68,10 +70,10 @@ def plot_UMAP(IPD: ImmunoPhenoData,
         legend of cell type (if available)
     """
     # Check if existing UMAP is present in class AND UMAP parameters have not changed
-    if (IPD._umap_kwargs == kwargs and IPD._raw_umap is not None) and normalized is False:
+    if (IPD._umap_kwargs == kwargs and IPD._raw_umap is not None) and normalized is False and force_update is False:
         # If so, return the stored UMAP
         return IPD._raw_umap
-    elif (IPD._umap_kwargs == kwargs and IPD._norm_umap is not None) and normalized is True:
+    elif (IPD._umap_kwargs == kwargs and IPD._norm_umap is not None) and normalized is True and force_update is False:
         return IPD._norm_umap
     else:
         # If no UMAP or kwargs are different, generate a new one and store in class
