@@ -25,6 +25,7 @@ hdbscan
 numba
 igraph
 pydot
+pydotplus
 graphviz
 
 pytest-cov
