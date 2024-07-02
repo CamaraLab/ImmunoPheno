@@ -2249,8 +2249,14 @@ class ImmunoPhenoDB_Connect:
                 Defaults to 1. 
 
         Returns:
-            pd.DataFrame: Returns a dataframe containing a list of antibodies ranked by their importance.
-            This includes the specific antibody ID and the protein that the antibody marks for.
+            tuple: Returns a tuple (pd.DataFrame, pd.DataFrame).
+
+            The first dataframe in the tuple will be the optimal antibody panel. This contains a
+            list of antibodies ranked by their importance. This includes the specific antibody ID 
+            and the protein that the antibody marks for.
+
+            The second dictionary in the tuple will be the purity and yield metrics for each 
+            cell population returned from the decision tree. 
         """
                                
         # Retrieve reference dataset
@@ -2286,6 +2292,36 @@ class ImmunoPhenoDB_Connect:
                 modified_class_names.append(name)
         cart.tree.classes_ = np.array(modified_class_names)
 
+        # Calculate the purity and yield for the gating plots
+        class_names = []
+        purity_values = []
+        yield_values = []
+        leaf_nodes = np.where((cart.tree.tree_.children_left == -1) & (cart.tree.tree_.children_right == -1))[0]
+
+        for leaf in leaf_nodes:
+            root_values_vector = cart.tree.tree_.value[0]
+            
+            class_index = np.argmax(cart.tree.tree_.value[leaf])
+            class_name = cart.tree.classes_[class_index]
+            class_names.append(class_name)
+            
+            total_num_samples = cart.tree.tree_.n_node_samples[leaf]
+            class_values = cart.tree.tree_.value[leaf][0][class_index]
+            root_values = root_values_vector[0][class_index]
+            
+            purity = class_values/total_num_samples
+            purity_values.append(purity)
+            
+            yield_val = class_values/root_values
+            yield_values.append(yield_val)
+
+        purity_yield = {
+            'purity': purity_values,
+            'yield': yield_values
+        }
+
+        sample_metrics = pd.DataFrame(purity_yield, index=class_names)
+
         if plot_decision_tree:
             dot_data = StringIO()
             export_graphviz(cart.tree, out_file=dot_data,
@@ -2300,5 +2336,5 @@ class ImmunoPhenoDB_Connect:
         if plot_gates:
             cart.generate_gating_plot(noise=False, plot_option=plot_gates_option)
             
-        return optimal_ab
+        return optimal_ab, sample_metrics
     
