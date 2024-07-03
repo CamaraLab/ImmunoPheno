@@ -355,23 +355,26 @@ def _filter_antibodies(protein_matrix: pd.DataFrame,
 def _load_labels(labels: str | pd.DataFrame) -> pd.DataFrame:
     """
     Shifts the first column (cell names) to become the index.
-    Remaining column will contain the cell types.
+    Remaining columns will contain the labels and celltypes.
 
     Parameters:
-        cell_label_df (Pandas DataFrame): cell types, rows = cells, col = types
+        cell_label_df (Pandas DataFrame): cell types 
+            Where: rows (Index) = cells, columns = labels, celltype
 
     Returns:
-        cell_label_modified (Pandas DataFrame): cell types with only one column
+        cell_label_modified (Pandas DataFrame): cell types, where
+            the index is the cell barcode names, and there are 
+            columns that can either contain labels or celltypes, or both.
     """
     if isinstance(labels, str):
-        labels_df = pd.read_csv(labels, header=None)
-        cell_label_modified = labels_df.copy(deep=True)
-        # Shift the first column to be the index
-        cell_label_modified.index = cell_label_modified.iloc[:, 0]
-        # Drop first column
-        cell_label_modified.drop(columns=labels_df.columns[0],
-                                    axis=1,
-                                    inplace=True)
+        cell_label_modified = pd.read_csv(labels, sep=",", index_col=[0])
+        # cell_label_modified = labels_df.copy(deep=True)
+        # # Shift the first column to be the index
+        # cell_label_modified.index = cell_label_modified.iloc[:, 0]
+        # # Drop first column
+        # cell_label_modified.drop(columns=labels_df.columns[0],
+        #                             axis=1,
+        #                             inplace=True)
     else:
         cell_label_modified = labels
 
