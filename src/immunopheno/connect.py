@@ -1525,7 +1525,7 @@ class ImmunoPhenoDB_Connect:
                 a cell type population. This is used to downsample a large reference
                 dataset. Defaults to 50 cells as the minimum number to define a population.
             k_find_nn (int): the number of nearest neighbors. Defaults to 40.
-            k_find_anchor (int): the number of neibhbors to find anchors. Defaults to 20.
+            k_find_anchor (int): the number of neighbors to find anchors. Defaults to 20.
             k_filter_anchor (int): the number of nearest neighbors to find in the original data space.
                 Defaults to 40.
             k_score_anchor (int): The number of neighbors to find anchors.
@@ -1645,7 +1645,7 @@ class ImmunoPhenoDB_Connect:
         index_diff = codex_normalized_with_ids.index.difference(labels_df.index)
         filtered_cells = {'labels': ['Not Assigned'] * len(index_diff), 'celltype': ['Not Assigned'] * len(index_diff)}
         new_df = pd.DataFrame(filtered_cells, index=index_diff)
-        complete_labels_df = labels_df.append(new_df)
+        complete_labels_df = pd.concat([labels_df, new_df])
 
         # Ensure that all NaN values are replaced with "Not Assigned" in the "celltype" column
         complete_labels_df['celltype'] = complete_labels_df['celltype'].fillna('Not Assigned')
