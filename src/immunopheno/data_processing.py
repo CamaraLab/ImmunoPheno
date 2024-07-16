@@ -505,6 +505,9 @@ def _classify_cells(fit_results: dict,
     if best_num_mix == 1:
         classified_cells = np.zeros_like(data_vector)
         return list(classified_cells)
+    
+    # Convert data_vector into a numpy array of floats
+    data_vector = np.array(data_vector, dtype=float)
 
     if mix_model['model'] == 'negative binomial (MLE)':
         n_params = mix_model['nb_n_params']
