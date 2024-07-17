@@ -1611,7 +1611,7 @@ class ImmunoPhenoDB_Connect:
                     # If imputation is successful, break out of the loop
                     break
                 except Exception as e:
-                    print(f"Poor quality reference dataset returned. Retrying...")
+                    print(f"Imputation failed. Retrying with new reference dataset...")
                     retries += 1
                     if retries == max_retries:
                         raise Exception("Max retries reached. Imputation failed.")
