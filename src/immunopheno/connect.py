@@ -1562,26 +1562,59 @@ class ImmunoPhenoDB_Connect:
 
             print("Retrieving reference dataset...")
             timeout = (600, 600) # connection, read timeout
-            stvea_response = requests.post(f"{self.url}/api/stveareference", json=stvea_body, timeout=timeout)
-            if 'text/html' in stvea_response.headers.get('content-type'):
-                raise Exception(stvea_response.text)
-            elif 'application/json' in stvea_response.headers.get('content-type'):
-                res_JSON = stvea_response.json()
-                reference_dataset = pd.DataFrame.from_dict(res_JSON)
+            # stvea_response = requests.post(f"{self.url}/api/stveareference", json=stvea_body, timeout=timeout)
+            # if 'text/html' in stvea_response.headers.get('content-type'):
+            #     raise Exception(stvea_response.text)
+            # elif 'application/json' in stvea_response.headers.get('content-type'):
+            #     res_JSON = stvea_response.json()
+            #     reference_dataset = pd.DataFrame.from_dict(res_JSON)
 
-            # Output statistics on the number of antibodies matched
-            columns_to_exclude = ["idCL", "idExperiment"]
-            num_antibodies_matched = (~reference_dataset.columns.isin(columns_to_exclude)).sum()
-            if parse_option == 1:
-                print(f"Number of antibodies matched from database using clone ID: {num_antibodies_matched}")
-            elif parse_option == 2:
-                print(f"Number of antibodies matched from database using antibody target: {num_antibodies_matched}")
-            elif parse_option == 3:
-                print(f"Number of antibodies matched from database using antibody ID: {num_antibodies_matched}")
+            # # Output statistics on the number of antibodies matched
+            # columns_to_exclude = ["idCL", "idExperiment"]
+            # num_antibodies_matched = (~reference_dataset.columns.isin(columns_to_exclude)).sum()
+            # if parse_option == 1:
+            #     print(f"Number of antibodies matched from database using clone ID: {num_antibodies_matched}")
+            # elif parse_option == 2:
+            #     print(f"Number of antibodies matched from database using antibody target: {num_antibodies_matched}")
+            # elif parse_option == 3:
+            #     print(f"Number of antibodies matched from database using antibody ID: {num_antibodies_matched}")
 
-            # Impute any missing values in reference dataset
-            print("Imputing missing values...")
-            imputed_reference = _impute_dataset_by_type(reference_dataset, rho=rho) 
+            # # Impute any missing values in reference dataset
+            # print("Imputing missing values...")
+            # imputed_reference = _impute_dataset_by_type(reference_dataset, rho=rho) 
+
+            max_retries = 5
+            retries = 0
+
+            while retries < max_retries:
+                try:
+                    stvea_response = requests.post(f"{self.url}/api/stveareference", json=stvea_body, timeout=timeout)
+                    if 'text/html' in stvea_response.headers.get('content-type'):
+                        raise Exception(stvea_response.text)
+                    elif 'application/json' in stvea_response.headers.get('content-type'):
+                        res_JSON = stvea_response.json()
+                        reference_dataset = pd.DataFrame.from_dict(res_JSON)
+
+                    imputed_reference = _impute_dataset_by_type(reference_dataset, rho=rho)
+
+                    # Output statistics on the number of antibodies matched
+                    columns_to_exclude = ["idCL", "idExperiment"]
+                    num_antibodies_matched = (~reference_dataset.columns.isin(columns_to_exclude)).sum()
+                    if parse_option == 1:
+                        print(f"Number of antibodies matched from database using clone ID: {num_antibodies_matched}")
+                    elif parse_option == 2:
+                        print(f"Number of antibodies matched from database using antibody target: {num_antibodies_matched}")
+                    elif parse_option == 3:
+                        print(f"Number of antibodies matched from database using antibody ID: {num_antibodies_matched}")
+
+                    print("Imputing missing values...")
+                    
+                    # If imputation is successful, break out of the loop
+                    break
+                except Exception as e:
+                    retries += 1
+                    if retries == max_retries:
+                        raise Exception("Max retries reached. Imputation failed.")
 
             # Apply stvea_correction value
             self.imputed_reference = imputed_reference.copy(deep=True).applymap(
