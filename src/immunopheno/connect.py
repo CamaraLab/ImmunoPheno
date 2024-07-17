@@ -464,7 +464,15 @@ def _keep_calling_filter_imputed(original_imputed_df, rho):
     # Return the final modified_idCLs
     return modified_imputed_df
 
-def _impute_dataset_by_type(downsampled_df, rho):
+def _impute_dataset_by_type(downsampled_df, rho, num_antibodies_matched, parse_option):
+    # Moved print statements from run_stvea to here
+    if parse_option == 1:
+        print(f"Number of antibodies matched from database using clone ID: {num_antibodies_matched}")
+    elif parse_option == 2:
+        print(f"Number of antibodies matched from database using antibody target: {num_antibodies_matched}")
+    elif parse_option == 3:
+        print(f"Number of antibodies matched from database using antibody ID: {num_antibodies_matched}")
+
     # Find all unique idCLs in the table
     unique_idCLs = list(set(downsampled_df['idCL']))
 
@@ -1595,19 +1603,20 @@ class ImmunoPhenoDB_Connect:
                         res_JSON = stvea_response.json()
                         reference_dataset = pd.DataFrame.from_dict(res_JSON)
 
-                    imputed_reference = _impute_dataset_by_type(reference_dataset, rho=rho)
-
                     # Output statistics on the number of antibodies matched
                     columns_to_exclude = ["idCL", "idExperiment"]
                     num_antibodies_matched = (~reference_dataset.columns.isin(columns_to_exclude)).sum()
-                    if parse_option == 1:
-                        print(f"Number of antibodies matched from database using clone ID: {num_antibodies_matched}")
-                    elif parse_option == 2:
-                        print(f"Number of antibodies matched from database using antibody target: {num_antibodies_matched}")
-                    elif parse_option == 3:
-                        print(f"Number of antibodies matched from database using antibody ID: {num_antibodies_matched}")
+                    # if parse_option == 1:
+                    #     print(f"Number of antibodies matched from database using clone ID: {num_antibodies_matched}")
+                    # elif parse_option == 2:
+                    #     print(f"Number of antibodies matched from database using antibody target: {num_antibodies_matched}")
+                    # elif parse_option == 3:
+                    #     print(f"Number of antibodies matched from database using antibody ID: {num_antibodies_matched}")
 
                     print("Imputing missing values...")
+                    imputed_reference = _impute_dataset_by_type(reference_dataset, rho=rho, 
+                                                                num_antibodies_matched=num_antibodies_matched, 
+                                                                parse_option=parse_option)
                     
                     # If imputation is successful, break out of the loop
                     break
