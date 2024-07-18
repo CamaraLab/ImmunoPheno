@@ -2123,6 +2123,7 @@ class ImmunoPhenoDB_Connect:
         print("Average number of experiments per antibody:", "{:.2f}".format(stats_JSON["avg_exp"]))
 
     def _antibody_panel(self,
+                        rho: float,
                         target: list, 
                         background: list = None,
                         tissue: list = None,
@@ -2232,7 +2233,7 @@ class ImmunoPhenoDB_Connect:
 
         # Impute missing values in
         print("Imputing missing values...")
-        imputed_ab_panel = _impute_dataset_by_type(res_df_no_background_column, rho=0.5)
+        imputed_ab_panel = _impute_dataset_by_type(res_df_no_background_column, rho=rho)
         # Re-assign background cells earlier as "Other" for their cell type
         indices_to_update = imputed_ab_panel.index.intersection(background_cells_to_relabel)
         imputed_ab_panel.loc[indices_to_update, 'idCL'] = "Other"
@@ -2250,7 +2251,8 @@ class ImmunoPhenoDB_Connect:
                                random_state: int = 0,
                                plot_decision_tree: bool = False,
                                plot_gates: bool = False,
-                               plot_gates_option: int = 1) -> pd.DataFrame:
+                               plot_gates_option: int = 1,
+                               rho: float = 0.1) -> pd.DataFrame:
         """Finds an optimized panel of antibodies to mark cell populations and tissues
 
         Uses reference data stored in the ImmunoPhenoDB database to generate a panel
@@ -2261,6 +2263,10 @@ class ImmunoPhenoDB_Connect:
         gating plots using the antibodies in the optimized panel. 
          
         Args:
+            rho (float): weight parameter to adjust the number of
+                cells or antibodies in the reference dataset. A small value of rho
+                will provide more cells and less antibodies. A large value of rho
+                will provide more antibodies and less cells. Defaults to 0.1.
             target (list): list of cell populations and/or tissues to query as the target
                 for antibodies in the panel. This must use cell ontology IDs and BRENDA tissue ontology IDs. 
                 Example: ["CL:0000084", "CL:0000236"]
@@ -2293,7 +2299,8 @@ class ImmunoPhenoDB_Connect:
         """
                                
         # Retrieve reference dataset
-        imputed_ab_panel = self._antibody_panel(target=target,
+        imputed_ab_panel = self._antibody_panel(rho=rho,
+                                                target=target,
                                                 background=background,
                                                 tissue=tissue,
                                                 experiment=experiment)
