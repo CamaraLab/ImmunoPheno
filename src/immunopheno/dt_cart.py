@@ -20,6 +20,7 @@ from dash import html
 from dash import dcc
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output
+import logging
 
 
 class PlotNode:
@@ -160,7 +161,7 @@ class CART(Algo):
             # check k
             # if k is larger than the total amount of features or k is smaller than 0
             # the function terminates
-            warnings.warn(f'Invalid k {k}')
+            logging.warning(f'Invalid k {k}')
             return
 
         # large and small are two pointers that point to two ends of the interval
@@ -173,7 +174,7 @@ class CART(Algo):
 
         if f_small < 0 or f_large > 0:
             # prevent some extreme cases.
-            warnings.warn('Unable to find tree, try generate_tree1')
+            logging.warning('Unable to find tree, try generate_tree1')
             return
 
         epoch = 0
@@ -203,12 +204,12 @@ class CART(Algo):
             # scenario 4:
             if f_large * f_medium > 0 and f_small * f_medium > 0:
                 # Unlikely scenario. The algorithm should converge to one root.
-                warnings.warn('Failed to converge.')
+                logging.warning('Failed to converge.')
                 break
 
             # scenario 5:
             if epoch > max_itr:
-                warnings.warn('Exceed the given maximum iteration.')
+                logging.warning('Exceed the given maximum iteration.')
                 break
 
             # increment epoch
@@ -222,7 +223,7 @@ class CART(Algo):
         elif f_small == 0:
             self.tree = small_tree
         else:
-            warnings.warn('Failed to find the tree. Adjust hyperparameter or try generate_tree1.')
+            logging.warning('Failed to find the tree. Adjust hyperparameter or try generate_tree1.')
             return
 
         # store the feature importance
