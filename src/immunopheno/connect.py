@@ -2263,10 +2263,6 @@ class ImmunoPhenoDB_Connect:
         gating plots using the antibodies in the optimized panel. 
          
         Args:
-            rho (float): weight parameter to adjust the number of
-                cells or antibodies in the reference dataset. A small value of rho
-                will provide more cells and less antibodies. A large value of rho
-                will provide more antibodies and less cells. Defaults to 0.1.
             target (list): list of cell populations and/or tissues to query as the target
                 for antibodies in the panel. This must use cell ontology IDs and BRENDA tissue ontology IDs. 
                 Example: ["CL:0000084", "CL:0000236"]
@@ -2285,7 +2281,11 @@ class ImmunoPhenoDB_Connect:
                 "1": displays a static plot using seaborn.
                 "2": displays an interactive plot using Plotly. Creates a file called "multiple_plots.html"
                 "3": displays an interactive plot using Dash. Must be viewed in a browser at 127.0.0.1:8050
-                Defaults to 1. 
+                Defaults to 1.
+            rho (float): weight parameter to adjust the number of
+                cells or antibodies in the reference dataset. A small value of rho
+                will provide more cells and less antibodies. A large value of rho
+                will provide more antibodies and less cells. Defaults to 0.1.
 
         Returns:
             tuple: Returns a tuple (pd.DataFrame, pd.DataFrame).
