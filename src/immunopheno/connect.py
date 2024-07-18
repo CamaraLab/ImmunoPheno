@@ -2313,6 +2313,10 @@ class ImmunoPhenoDB_Connect:
         # Retrieve top features (optimal antibodies)
         optimal_ab = cart.feature_importance
 
+        if cart.tree is None:
+            print("Unable to generate tree")
+            return
+
         # Add readable cell type names to tree classes prior to plot generation
         modified_class_names = []
         for name in cart.tree.classes_:
