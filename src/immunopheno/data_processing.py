@@ -1721,7 +1721,7 @@ class ImmunoPhenoData:
                 self._cell_labels['celltype'] = self._cell_labels['labels'].map(labels_map)
 
                 # Ensure all "labels" follow the format of "CL:XXXXXXX"
-                self._cell_labels["labels"] = self._cell_labels["labels"].str.replace(r'^CL_([0-9]+)$', r'CL:\1')
+                self._cell_labels["labels"] = self._cell_labels["labels"].str.replace(r'^CL_([0-9]+)$', r'CL:\1', regex=True)
                 
                 # Set new table
                 # self._cell_labels = temp_df
@@ -1736,7 +1736,7 @@ class ImmunoPhenoData:
                     self._cell_labels_filt_df['celltype'] = self._cell_labels_filt_df['labels'].map(norm_labels_map)
 
                     # Ensure all "labels" follow the format of "CL:XXXXXXX"
-                    self._cell_labels_filt_df["labels"] = self._cell_labels_filt_df["labels"].str.replace(r'^CL_([0-9]+)$', r'CL:\1')
+                    self._cell_labels_filt_df["labels"] = self._cell_labels_filt_df["labels"].str.replace(r'^CL_([0-9]+)$', r'CL:\1', regex=True)
 
                     # Set new table
                     # self._cell_labels_filt_df = norm_temp_df
