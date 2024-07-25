@@ -1021,6 +1021,7 @@ class ImmunoPhenoDB_Connect:
         self.url = url
         self.imputed_reference = None
         self.transfer_matrix = None
+        self.antibody_panel_imputed_reference = None
 
         self._OWL_graph = None
         self._subgraph = None
@@ -1029,7 +1030,6 @@ class ImmunoPhenoDB_Connect:
         self._last_stvea_params = None
         self._downsample_pairwise_graph = None
         self._nn_dist = None
-        self._antibody_panel_imputed_reference = None
 
         if self.url is None:
             raise Exception("Error. Server URL must be provided")
@@ -2252,7 +2252,8 @@ class ImmunoPhenoDB_Connect:
                                plot_decision_tree: bool = False,
                                plot_gates: bool = False,
                                plot_gates_option: int = 1,
-                               rho: float = 0.1) -> pd.DataFrame:
+                               rho: float = 0.1,
+                               shift: int = 0) -> pd.DataFrame:
         """Finds an optimized panel of antibodies to mark cell populations and tissues
 
         Uses reference data stored in the ImmunoPhenoDB database to generate a panel
@@ -2282,10 +2283,12 @@ class ImmunoPhenoDB_Connect:
                 "2": displays an interactive plot using Plotly. Creates a file called "multiple_plots.html"
                 "3": displays an interactive plot using Dash. Must be viewed in a browser at 127.0.0.1:8050
                 Defaults to 1.
-            rho (float): weight parameter to adjust the number of
-                cells or antibodies in the reference dataset. A small value of rho
-                will provide more cells and less antibodies. A large value of rho
-                will provide more antibodies and less cells. Defaults to 0.1.
+            rho (float, optional): weight parameter to adjust the number of cells or antibodies in the reference dataset. 
+                A small value of rho will provide more cells and less antibodies. 
+                A large value of rho will provide more antibodies and less cells. Defaults to 0.1.
+            shift (int, optional): value subtracted from all protein expression counts 
+                in the antibody panel reference dataset. A larger value for the shift will lead to less
+                discrete populations in the gating plots. Defaults to 0 (no shift applied).
 
         Returns:
             tuple: Returns a tuple (pd.DataFrame, pd.DataFrame).
@@ -2304,13 +2307,16 @@ class ImmunoPhenoDB_Connect:
                                                 background=background,
                                                 tissue=tissue,
                                                 experiment=experiment)
-        # Apply stvea_correction value
-        # self._antibody_panel_imputed_reference = imputed_ab_panel.copy(deep=True).applymap(
-        #             lambda x: x - 9 if (x != 0 and type(x) is not str) else x)
-        self._antibody_panel_imputed_reference = imputed_ab_panel.copy(deep=True)
-        
-        normalized_counts = self._antibody_panel_imputed_reference.loc[:, self._antibody_panel_imputed_reference.columns != 'idCL']
-        idCLs = pd.DataFrame(self._antibody_panel_imputed_reference["idCL"])
+        # Apply correction value
+        self.antibody_panel_imputed_reference = imputed_ab_panel.copy(deep=True).applymap(
+            lambda x: x - shift if isinstance(x, (int, float)) and x != 0 else x)
+
+        # Replace any negative values in the reference dataset with zero
+        self.antibody_panel_imputed_reference = self.antibody_panel_imputed_reference.applymap(
+            lambda x: 0 if isinstance(x, (int, float)) and x < 0 else x)
+
+        normalized_counts = self.antibody_panel_imputed_reference.loc[:, self.antibody_panel_imputed_reference.columns != 'idCL']
+        idCLs = pd.DataFrame(self.antibody_panel_imputed_reference["idCL"])
                             
         # Create CART object
         cart = CART(data=normalized_counts, label=idCLs)
