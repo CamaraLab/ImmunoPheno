@@ -15,7 +15,7 @@ import pandas as pd
 import numpy as np
 from scipy.stats import entropy
 from sklearn.impute import KNNImputer
-from sklearn.tree import export_graphviz
+from sklearn.tree import export_graphviz, _tree
 
 import plotly.express as px
 import plotly.graph_objects as go
@@ -997,6 +997,39 @@ def _calculate_entropies_fast(transfer_matrix, cell_indices_by_type):
     entropies_df = entropies.to_frame(name='entropy')
     
     return cell_type_sums, entropies_df
+
+# Pruning decision tree leaves with the same class
+def _is_leaf(tree, node_id):
+    """Check if a node is a leaf node in a sklearn tree"""
+    return tree.children_left[node_id] == _tree.TREE_LEAF and tree.children_right[node_id] == _tree.TREE_LEAF
+
+def _prune_tree(tree, node_id=0):
+    """
+    Prunes a sklearn tree recursively in-place by merging leaf nodes with the same class
+    """
+    left_child = tree.children_left[node_id]
+    right_child = tree.children_right[node_id]
+    
+    # If the current node is a leaf node, return its class name
+    if _is_leaf(tree, node_id):
+        return tree.value[node_id].argmax()
+
+    # Recursively prune the left and right children
+    left_class = right_class = None
+    if left_child != _tree.TREE_LEAF:
+        left_class = _prune_tree(tree, left_child)
+    if right_child != _tree.TREE_LEAF:
+        right_class = _prune_tree(tree, right_child)
+
+    # If both children are leaf nodes and have the same class, prune them
+    if left_child != _tree.TREE_LEAF and right_child != _tree.TREE_LEAF:
+        if _is_leaf(tree, left_child) and _is_leaf(tree, right_child) and left_class == right_class:
+            tree.children_left[node_id] = _tree.TREE_LEAF
+            tree.children_right[node_id] = _tree.TREE_LEAF
+            tree.value[node_id] = tree.value[left_child] + tree.value[right_child]
+            return left_class
+
+    return None
 
 class ImmunoPhenoDB_Connect:
     """A class to interact with the ImmunoPheno database
@@ -2323,6 +2356,9 @@ class ImmunoPhenoDB_Connect:
 
         # Create decision tree
         cart.generate_tree2(k=panel_size, max_itr=max_itr, random_state=random_state)
+
+        # Prune the decision tree to remove pairs of leaf nodes with the same class (cell population) name
+        _prune_tree(cart.tree.tree_) 
 
         # Retrieve top features (optimal antibodies)
         optimal_ab = cart.feature_importance
