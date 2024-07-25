@@ -301,7 +301,7 @@ class CART(Algo):
         row_labels = []
         for i in range(tree.node_count):
             # iterate through every node
-            if tree.children_left[i] == -1 and tree.children_right[i] == -1:
+            if tree.children_left[i] == -1 and tree.children_right[i] == -1 and plot_tree[i].plot: # Add condition to check for nodes with None
                 # this is a leaf
                 # set label
                 leaf_class = np.argmax(tree.value[i])
@@ -513,7 +513,7 @@ class CART(Algo):
         row_labels = []
         for i in range(tree.node_count):
             # Iterate through every node
-            if tree.children_left[i] == -1 and tree.children_right[i] == -1:
+            if tree.children_left[i] == -1 and tree.children_right[i] == -1 and plot_tree[i].plot: # Add condition to check for nodes with None
                 # this is a leaf
                 # set label
                 leaf_class = np.argmax(tree.value[i])
@@ -756,7 +756,7 @@ class CART(Algo):
         label_index = 1
         for i in range(tree.node_count):
             # iterate through every node
-            if tree.children_left[i] == -1 and tree.children_right[i] == -1:
+            if tree.children_left[i] == -1 and tree.children_right[i] == -1 and plot_tree[i].plot: # Add condition to check for nodes with None
                 # this is a leaf
                 # set label
                 leaf_class = np.argmax(tree.value[i])
