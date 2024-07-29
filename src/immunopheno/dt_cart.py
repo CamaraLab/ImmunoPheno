@@ -475,7 +475,7 @@ class CART(Algo):
         for i in range(y_length):
             for j in range(x_length):
                 if is_axs_empty(axs[i, j]):
-                    axs[i, j].axis('off')
+                    fig.delaxes(axs[i, j])
 
         plt.tight_layout(pad=5.0)
 
