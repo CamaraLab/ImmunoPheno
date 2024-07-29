@@ -301,7 +301,7 @@ class CART(Algo):
         row_labels = []
         for i in range(tree.node_count):
             # iterate through every node
-            if tree.children_left[i] == -1 and tree.children_right[i] == -1 and plot_tree[i].plot: # Add condition to check for nodes with None
+            if tree.children_left[i] == -1 and tree.children_right[i] == -1 and plot_tree[i].plot:
                 # this is a leaf
                 # set label
                 leaf_class = np.argmax(tree.value[i])
@@ -342,6 +342,9 @@ class CART(Algo):
                             # else:
                             ax = axs[leave_count, j // 2]
 
+                            row = leave_count + 1
+                            col = (j // 2) + 1
+                            
                             node_direction = directions[j]
                             parent_direction = directions[j - 1]
 
@@ -354,7 +357,7 @@ class CART(Algo):
                             plot_data = self.data.loc[parent_data_index, :]
                             plot_data_node = plot_data.loc[:, self.tree.feature_names_in_[node_feature]]
                             plot_data_parent = plot_data.loc[:, self.tree.feature_names_in_[parent_node_feature]]
-
+                            
                             if noise:
                                 # some noise to increase visibility
                                 plot_data_node_noise = np.random.normal(0, plot_data_node.std() / 7,
@@ -365,13 +368,22 @@ class CART(Algo):
                                                                           size=len(plot_data_parent))
                                 plot_data_parent = plot_data_parent + plot_data_parent_noise
 
-                            # creat the plot
+                            # display the raw datapoints
+                            sns.scatterplot(x=plot_data_node, 
+                                            y=plot_data_parent,
+                                            ax=ax,
+                                            color='k', 
+                                            s=10)
+                
+                            # create the plot
                             sns.kdeplot(x=plot_data_node,
                                         y=plot_data_parent,
                                         ax=ax,
                                         fill=True,
-                                        bw_adjust=0.8,
+                                        bw_adjust=0.6, # Smoothing factor
+                                        alpha=0.75,    # Opacity
                                         cmap='coolwarm')
+                            
                             ax.set_xlabel(self.tree.feature_names_in_[node_feature])
                             ax.set_ylabel(self.tree.feature_names_in_[parent_node_feature])
 
@@ -384,7 +396,7 @@ class CART(Algo):
 
                             y_max = plot_data_parent.max()
                             y_min = plot_data_parent.min()
-
+                            
                             ax.set_xlim(x_min - 0.3, x_max + 0.3)
                             ax.set_ylim(y_min - 0.3, y_max + 0.3)
 
@@ -409,8 +421,8 @@ class CART(Algo):
                             ax.add_patch(rect)
 
                             padding = 1
-                            ax.set_xlim([x_start - padding, (x_start + x_len) + padding])
-                            ax.set_ylim([y_start - padding, (y_start + y_len) + padding])
+                            ax.set_xlim([0 - padding, x_max + padding])
+                            ax.set_ylim([0 - padding, y_max + padding])
 
                         elif plot_node.even and (node == backtrack_array[-1]):
                             # even leaf
