@@ -1031,6 +1031,48 @@ def _prune_tree(tree, node_id=0):
 
     return None
 
+# Getting paths to each leaf node in the decision tree
+def _get_leaf_paths(tree, feature_names=None, class_names=None):
+    """
+    Get all paths to leaf nodes in a decision tree.
+
+    Parameters:
+    tree: The decision tree.
+    feature_names: Names of the features used in the decision tree.
+    class_names: Names of the classes in the target variable.
+
+    Returns:
+    List of paths, where each path is a list of conditions ending with the class name.
+    """
+    def recurse(node, path, paths):
+        # If the current node is a leaf node, record the path
+        if tree.children_left[node] == _tree.TREE_LEAF and tree.children_right[node] == _tree.TREE_LEAF:
+            # Get the class value for the leaf node
+            class_value = np.argmax(tree.value[node])
+            # Get the class name if provided, otherwise use the class value
+            class_name = class_names[class_value] if len(class_names) > 0 else class_value
+            paths.append(path + [f'class: {class_name}'] + [f'node: {node}'])
+            return
+        
+        # If the feature names are provided, use them; otherwise, use the feature index
+        if len(feature_names) > 0:
+            feature = feature_names[tree.feature[node]]
+        else:
+            feature = tree.feature[node]
+        threshold = tree.threshold[node]
+
+        # Traverse the left child
+        if tree.children_left[node] != _tree.TREE_LEAF:
+            recurse(tree.children_left[node], path + [(feature, '<=', threshold)], paths)
+        
+        # Traverse the right child
+        if tree.children_right[node] != _tree.TREE_LEAF:
+            recurse(tree.children_right[node], path + [(feature, '<=', threshold)], paths)
+
+    paths = []
+    recurse(0, [], paths)
+    return paths
+
 class ImmunoPhenoDB_Connect:
     """A class to interact with the ImmunoPheno database
 
@@ -2379,35 +2421,42 @@ class ImmunoPhenoDB_Connect:
                 modified_class_names.append(name)
         cart.tree.classes_ = np.array(modified_class_names)
 
-        # Calculate the purity and yield for the gating plots
-        class_names = []
-        purity_values = []
-        yield_values = []
-        leaf_nodes = np.where((cart.tree.tree_.children_left == -1) & (cart.tree.tree_.children_right == -1))[0]
+        # Get all paths to leaf nodes
+        paths = _get_leaf_paths(tree=cart.tree.tree_, 
+                                feature_names=cart.tree.feature_names_in_, 
+                                class_names=cart.tree.classes_.astype(str))
 
-        for leaf in leaf_nodes:
-            root_values_vector = cart.tree.tree_.value[0]
-            
-            class_index = np.argmax(cart.tree.tree_.value[leaf])
-            class_name = cart.tree.classes_[class_index]
-            class_names.append(class_name)
-            
-            total_num_samples = cart.tree.tree_.n_node_samples[leaf]
-            class_values = cart.tree.tree_.value[leaf][0][class_index]
-            root_values = root_values_vector[0][class_index]
-            
-            purity = class_values/total_num_samples
-            purity_values.append(purity)
-            
-            yield_val = class_values/root_values
-            yield_values.append(yield_val)
+        # For each path "strategy" to the leaf node, store the
+        # resulting class name, purity, yield, and nodes encountered as the path
+        path_yield_purity = {}
 
-        purity_yield = {
-            'purity': purity_values,
-            'yield': yield_values
-        }
+        for i, path in enumerate(paths):
+            inner_dict = {}
+            entire_path = []
+            for condition in path:
+                if "node" in condition:
+                    # This is a leaf node
+                    leaf_node = int(condition.split("node: ", 1)[1])
+                    
+                    root_values_vector = cart.tree.tree_.value[0]
+                    class_index = np.argmax(cart.tree.tree_.value[leaf_node])
 
-        sample_metrics = pd.DataFrame(purity_yield, index=class_names)
+                    total_num_samples = cart.tree.tree_.n_node_samples[leaf_node]
+                    class_values = cart.tree.tree_.value[leaf_node][0][class_index]
+                    root_values = root_values_vector[0][class_index]
+                    
+                    purity = class_values/total_num_samples
+                    yield_val = class_values/root_values
+
+                    inner_dict["purity"] = purity
+                    inner_dict["yield"] = yield_val
+                elif "class" in condition:
+                    inner_dict["class"] = condition.split("class: ", 1)[1]
+                else:
+                    entire_path.append(condition)
+            
+            inner_dict["path"] = entire_path
+            path_yield_purity[f"Strategy {i+1}"] = inner_dict
 
         if plot_decision_tree:
             dot_data = StringIO()
@@ -2423,5 +2472,5 @@ class ImmunoPhenoDB_Connect:
         if plot_gates:
             cart.generate_gating_plot(noise=False, plot_option=plot_gates_option)
             
-        return optimal_ab, sample_metrics
+        return optimal_ab, path_yield_purity
     
