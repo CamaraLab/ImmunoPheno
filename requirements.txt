@@ -18,6 +18,7 @@ tqdm
 dash
 dash-bootstrap-components
 nbformat
+pillow==10.4.0
 
 scanpy
 anndata
