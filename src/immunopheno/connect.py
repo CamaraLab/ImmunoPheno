@@ -8,6 +8,7 @@ import pydot
 import pydotplus
 from importlib.resources import files
 from io import StringIO
+from PIL import Image, ImageDraw, ImageFont
 
 import math
 import scipy
@@ -2468,6 +2469,42 @@ class ImmunoPhenoDB_Connect:
 
             graph = pydotplus.graph_from_dot_data(dot_data.getvalue())
             graph.write_png('decision_tree.png')
+
+            # Open the PNG image using Pillow
+            image = Image.open('decision_tree.png')
+            draw = ImageDraw.Draw(image)
+
+            # Define the legend content and its position
+            legend_text = "Value Legend\n" + "\n".join([f"{i}: {name}" for i, name in enumerate(cart.tree.classes_.astype(str))])
+            legend_x = 0
+            legend_y = 0
+            legend_padding = 10
+
+            # Get font size
+            font = ImageFont.load_default(17)
+
+            # Calculate text size using textbbox
+            bbox = draw.textbbox((legend_x, legend_y), legend_text, font=font)
+            text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
+
+            # Draw the legend box
+            draw.rectangle(
+                [legend_x, legend_y, legend_x + text_width + 2 * legend_padding, legend_y + text_height + 2 * legend_padding],
+                fill="white",
+                outline="black"
+            )
+
+            # Draw the legend text
+            draw.text(
+                (legend_x + legend_padding, legend_y + legend_padding),
+                legend_text,
+                fill="black",
+                font=font
+            )
+
+            # Save the image with the legend
+            image.save('decision_tree.png')
 
         if plot_gates:
             cart.generate_gating_plot(noise=False, plot_option=plot_gates_option)
