@@ -1548,6 +1548,7 @@ class ImmunoPhenoDB_Connect:
 
     def run_stvea(self,
                   IPD: ImmunoPhenoData,
+                  IPD_reference: ImmunoPhenoData = None,
                   idBTO: list = None, 
                   idExperiment: list = None, 
                   parse_option: int = 1,
@@ -1581,7 +1582,11 @@ class ImmunoPhenoDB_Connect:
         Args:
             IPD (ImmunoPhenoData): ImmunoPhenoData object that must already contain the
                 normalized protein counts and a spreadsheet with all antibody IDs for each
-                antibody used in the experiment. 
+                antibody used in the experiment.
+            IPD_reference (ImmunoPhenoData, optional): ImmunoPhenoData object containing normalized
+                protein counts used as the reference dataset instead of retrieving
+                a normalized protein table from the database. This must also contain the corresponding
+                cell annotations for each cell in the normalized protein counts. 
             idBTO (list, optional): list of tissue IDs used to restrict the
                 reference dataset. This is optional, but specifying a tissue will greatly
                 improve the accuracy of the annotations.
@@ -1620,10 +1625,36 @@ class ImmunoPhenoDB_Connect:
             accessible in the "labels" property of the new object.
         """
 
+        # Target dataset
         IPD_new = copy.deepcopy(IPD)
 
+        # Check for normalized protein in target IPD object
+        if IPD_new.normalized_counts is None:
+            raise Exception("Error. Normalized protein count data not found in target.")
+
+        # Option to use self provided reference dataset from ImmunoPhenoData object
+        if IPD_reference is not None:
+            print("Using provided reference dataset...")
+            # Check for normalized counts
+            if IPD_reference.normalized_counts is None:
+                raise Exception("Error. Normalized protein count data not found in reference.")
+            
+            # Check for labels
+            if IPD_reference.labels is None:
+                raise Exception("Error. Cell annotations for normalized protein not found in reference.")
+            
+            # Create a new reference dataset
+            ipd_norm = IPD_reference.normalized_counts.copy(deep=True)
+            ipd_norm["idCL"] = IPD_reference.labels["labels"]
+            self.imputed_reference = ipd_norm
+
+            # Using provided reference data, skip converting antibodies to their IDs
+            codex_normalized_with_ids = IPD_new._normalized_counts_df
+            codex_normalized_with_ids = _remove_all_zeros_or_na(codex_normalized_with_ids)
+            
+        # Retrieving reference data from database
         # Check if reference query parameters have changed OR if the reference table is empty
-        if (IPD_new, IPD_new._stvea_correction_value, idBTO, idExperiment, 
+        if IPD_reference is None and (IPD_new, IPD_new._stvea_correction_value, idBTO, idExperiment, 
             parse_option, rho, population_size) != self._last_stvea_params or self.imputed_reference is None:
 
             antibody_pairs = [[key, value] for key, value in IPD_new._ab_ids_dict.items()]
@@ -1699,16 +1730,16 @@ class ImmunoPhenoDB_Connect:
             # Store these parameters to check for subsequent function calls
             self._last_stvea_params = (IPD_new, IPD_new._stvea_correction_value, idBTO, idExperiment, 
                                        parse_option, rho, population_size)
+            
+            # Convert antibody names from CODEX (target) normalized counts to their IDs, since the database returns IDs   
+            codex_normalized_with_ids = IPD_new._normalized_counts_df.rename(columns=IPD_new._ab_ids_dict, inplace=False)
+            
+            # Perform check for rows/columns with all 0s or NAs
+            codex_normalized_with_ids = _remove_all_zeros_or_na(codex_normalized_with_ids)
 
         # Separate out the antibody counts from the cell IDs 
         imputed_antibodies = self.imputed_reference.loc[:, self.imputed_reference.columns != 'idCL']
         imputed_idCLs = self.imputed_reference['idCL'].to_frame()
-    
-        # Convert antibody names from CODEX normalized counts to their IDs
-        codex_normalized_with_ids = IPD_new._normalized_counts_df.rename(columns=IPD_new._ab_ids_dict, inplace=False)
-    
-        # Perform check for rows/columns with all 0s or NAs
-        codex_normalized_with_ids = _remove_all_zeros_or_na(codex_normalized_with_ids)
                         
         # At this stage, we have all the information we need to run STvEA
         print("Running STvEA...")
