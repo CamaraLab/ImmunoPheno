@@ -1645,7 +1645,15 @@ class ImmunoPhenoDB_Connect:
             
             # Create a new reference dataset
             ipd_norm = IPD_reference.normalized_counts.copy(deep=True)
-            ipd_norm["idCL"] = IPD_reference.labels["idCL"]
+            if "idCL" in IPD_reference.labels:
+                ipd_norm["idCL"] = IPD_reference.labels["idCL"]
+            elif "labels" in IPD_reference.labels:
+                ipd_norm["idCL"] = IPD_reference.labels["labels"]
+            elif "celltype" in IPD_reference.labels:
+                ipd_norm["idCL"] = IPD_reference.labels["celltype"]
+            else:
+                raise KeyError("None of 'idCL', 'labels', or 'celltype' are present in IPD_reference.labels.")
+
             self.imputed_reference = ipd_norm
 
             # Using provided reference data, skip converting antibodies to their IDs
