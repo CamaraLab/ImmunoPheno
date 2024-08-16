@@ -1645,7 +1645,7 @@ class ImmunoPhenoDB_Connect:
             
             # Create a new reference dataset
             ipd_norm = IPD_reference.normalized_counts.copy(deep=True)
-            ipd_norm["idCL"] = IPD_reference.labels["labels"]
+            ipd_norm["idCL"] = IPD_reference.labels["idCL"]
             self.imputed_reference = ipd_norm
 
             # Using provided reference data, skip converting antibodies to their IDs
