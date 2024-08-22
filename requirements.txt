@@ -23,7 +23,7 @@ pillow==10.4.0
 scanpy
 anndata
 
-hdbscan
+hdbscan==0.8.31 
 numba
 igraph
 pydot
