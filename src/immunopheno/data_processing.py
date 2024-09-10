@@ -1916,6 +1916,10 @@ class ImmunoPhenoData:
                 raise TransformTypeError(("Invalid transformation type. " 
                                           "Please choose 'log' or 'arcsinh'. "
                                           "Default: None."))
+        elif transform_type is None:
+            # If no transform type, reset data back to normal
+            self.protein.loc[:, ab_name] = self._temp_protein.loc[:, ab_name]
+            data_vector = list(self._temp_protein.loc[:, ab_name])
 
         if model == 'gaussian':
             gauss_params = _gmm_results(counts=data_vector,
