@@ -2242,7 +2242,8 @@ class ImmunoPhenoDB_Connect:
                         target: list, 
                         background: list = None,
                         tissue: list = None,
-                        experiment: list = None) -> dict: 
+                        experiment: list = None,
+                        seed: int = 42) -> dict: 
                 
         # Client side sanitization
         if len(target) == 0:
@@ -2298,6 +2299,20 @@ class ImmunoPhenoDB_Connect:
             for element in background_idBTOs:
                 if element not in target_idBTOs:
                     modified_background_family_idBTOs.append(element)
+        elif background is None:
+            # If background is None, then we consider ALL the idCLs in the database, which are not a part of
+            # the target and the target's descendants
+
+            # Make an API call to the server to get ALL the idCLs
+            idCLs_response = requests.get(f"{self.url}/api/idcls")
+            idCLs_JSON = idCLs_response.json()
+            all_idCLs_in_db = idCLs_JSON["idCLs"] # This is the TEMPORARY "background" idCLs list
+
+            # We don't need to find the descendants of all_idCLs_in_db here, since we encompass all idCLs in the database so far
+            # Remove any values from all_idCLs_in_db that were listed in target
+            for element in all_idCLs_in_db:
+                if element not in unique_target_family_idCLs:
+                    modified_background_family_idCLs.append(element)
 
         # Step 6: Tissue filter list has the HIGHEST priority over the target and the background. 
         # Filter out any tissues from both target/background lists that were not found in the tissue filter list.
@@ -2321,7 +2336,11 @@ class ImmunoPhenoDB_Connect:
                     
             final_target_idBTOs = list(set(final_target_idBTOs))
             final_background_idBTOs = list(set(final_background_idBTOs))
-        else: # we do no filtering
+        elif tissue is None: # we do no filtering
+            # If tissue is None, then we consider ALL the tissues in the database
+            # In this case, since we have no tissues specified
+            # Then all tissues in target will be valid
+            # Likewise, all tissues in background (if provided) will be valid
             final_target_idBTOs = target_idBTOs
             final_background_idBTOs = modified_background_family_idBTOs
 
@@ -2331,7 +2350,8 @@ class ImmunoPhenoDB_Connect:
             "target_idbto": final_target_idBTOs,
             "background_idcl": modified_background_family_idCLs,
             "background_idbto": final_background_idBTOs,
-            "experiment": experiment
+            "experiment": experiment,
+            "seed": seed
         }
 
         print("Retrieving antibody panel reference data...")
@@ -2368,7 +2388,8 @@ class ImmunoPhenoDB_Connect:
                                plot_gates: bool = False,
                                plot_gates_option: int = 1,
                                rho: float = 0.1,
-                               shift: int = 0) -> pd.DataFrame:
+                               shift: int = 0,
+                               seed: int = 42) -> pd.DataFrame:
         """Finds an optimized panel of antibodies to mark cell populations and tissues
 
         Uses reference data stored in the ImmunoPhenoDB database to generate a panel
@@ -2404,6 +2425,7 @@ class ImmunoPhenoDB_Connect:
             shift (int, optional): value subtracted from all protein expression counts 
                 in the antibody panel reference dataset. A larger value for the shift will lead to less
                 discrete populations in the gating plots. Defaults to 0 (no shift applied).
+            seed (int, optional): seed value when randomly downsampling the reference table in the server
 
         Returns:
             tuple: Returns a tuple (pd.DataFrame, pd.DataFrame).
@@ -2421,7 +2443,8 @@ class ImmunoPhenoDB_Connect:
                                                 target=target,
                                                 background=background,
                                                 tissue=tissue,
-                                                experiment=experiment)
+                                                experiment=experiment,
+                                                seed=seed)
         # Apply correction value
         self.antibody_panel_imputed_reference = imputed_ab_panel.copy(deep=True).applymap(
             lambda x: x - shift if isinstance(x, (int, float)) and x != 0 else x)
