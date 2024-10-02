@@ -2045,7 +2045,8 @@ class ImmunoPhenoDB_Connect:
             print(f"{readable} ({cell_type}): {len(group.index)}")
 
         # Renaming step
-        temp_labels.loc[cells_to_unlabel.index, ['labels', 'celltype']] = "Not Assigned"
+        common_indices = temp_labels.index.intersection(cells_to_unlabel.index)
+        temp_labels.loc[common_indices, ['labels', 'celltype']] = "Not Assigned"
 
         # Set this temp_labels table in a new IPD object
         temp_copy = copy.deepcopy(IPD)
@@ -2094,7 +2095,8 @@ class ImmunoPhenoDB_Connect:
             print(f"{readable} ({cell_type}): {len(group.index)}")
 
         # Renaming step
-        temp_labels.loc[cells_to_unlabel.index, ['labels', 'celltype']] = "Not Assigned"
+        common_indices = temp_labels.index.intersection(cells_to_unlabel.index)
+        temp_labels.loc[common_indices, ['labels', 'celltype']] = "Not Assigned"
 
         # Set this temp_labels table in a new IPD object
         temp_copy = copy.deepcopy(IPD)
