@@ -2029,7 +2029,8 @@ class ImmunoPhenoDB_Connect:
         temp_labels = cell_labels_df.copy(deep=True)
         
         # Find the number of cells for each cell type getting re-assigned
-        cells_group_df = (temp_labels.loc[cells_to_unlabel.index])
+        cells_group_df = temp_labels[temp_labels.index.isin(cells_to_unlabel.index)] 
+
         # Disregard cells that were already named "Not assigned"
         num_cells_already_not_assigned = sum(cells_group_df["labels"] == "Not Assigned")
         print("Number of cells renamed to 'Not Assigned':", len(cells_group_df) - num_cells_already_not_assigned )
