@@ -1734,6 +1734,10 @@ class ImmunoPhenoDB_Connect:
             # Apply stvea_correction value
             self.imputed_reference = imputed_reference.copy(deep=True).applymap(
                         lambda x: x - IPD_new._stvea_correction_value if (x != 0 and type(x) is not str) else x)
+            
+            # Replace any negative values in the reference dataset with zero
+            self.imputed_reference = self.imputed_reference.applymap(
+                lambda x: 0 if isinstance(x, (int, float)) and x < 0 else x)
 
             # Store these parameters to check for subsequent function calls
             self._last_stvea_params = (IPD_new, IPD_new._stvea_correction_value, idBTO, idExperiment, 
