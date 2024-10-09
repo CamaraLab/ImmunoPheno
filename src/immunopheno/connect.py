@@ -1738,6 +1738,9 @@ class ImmunoPhenoDB_Connect:
             # Replace any negative values in the reference dataset with zero
             self.imputed_reference = self.imputed_reference.applymap(
                 lambda x: 0 if isinstance(x, (int, float)) and x < 0 else x)
+            
+            # Convert string ('object') index of numbers to int64 index
+            self.imputed_reference.index = self.imputed_reference.index.astype("int64")
 
             # Store these parameters to check for subsequent function calls
             self._last_stvea_params = (IPD_new, IPD_new._stvea_correction_value, idBTO, idExperiment, 
