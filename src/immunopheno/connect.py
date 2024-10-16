@@ -1564,6 +1564,7 @@ class ImmunoPhenoDB_Connect:
                   c_transfer_matrix: float = 0.5,
                   mask_threshold: float = 0.75,
                   mask: bool = True,
+                  seed: int = 42,
                   num_chunks: int = 1,
                   num_cores: int = 1):
         """Automatically transfers single cell annotations to cytometry data
@@ -1617,6 +1618,7 @@ class ImmunoPhenoDB_Connect:
             mask_threshold (float): specifies threshold to discard query cells. Defaults to 0.75.
             mask (bool): a boolean value to specify whether to discard 
                 query cells that don't have nearby reference cells. Defaults to True.
+            seed (int, optional): seed value when randomly downsampling the reference table in the server
             num_chunks (int): number of chunks to split the protein dataset for parallelization. Defaults to 1.
             num_cores (int): number of cores used to run in parallel. Defaults to 1.
 
@@ -1672,7 +1674,8 @@ class ImmunoPhenoDB_Connect:
                 "idBTO": idBTO,
                 "idExperiment": idExperiment,
                 "parse_option": parse_option,
-                "population_size": population_size
+                "population_size": population_size,
+                "seed": seed
             }
 
             print("Retrieving reference dataset...")
