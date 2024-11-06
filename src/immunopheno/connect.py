@@ -2020,7 +2020,18 @@ class ImmunoPhenoDB_Connect:
         elif decision_tree_response.status_code == 200:
             buffer = io.BytesIO(decision_tree_response.content)
             dt_reference_dataset = pd.read_parquet(buffer)
-    
+
+         # Output statistics on the number of antibodies matched
+        columns_to_exclude = ["idCL"]
+        num_antibodies_matched = (~dt_reference_dataset.columns.isin(columns_to_exclude)).sum()
+        if parse_option == 1:
+            print(f"Number of antibodies matched from database using clone ID: {num_antibodies_matched}")
+        elif parse_option == 2:
+            print(f"Number of antibodies matched from database using antibody target: {num_antibodies_matched}")
+        elif parse_option == 3:
+            print(f"Number of antibodies matched from database using antibody ID: {num_antibodies_matched}")
+        print("Total number of cells returned:", len(dt_rseference_dataset.index))
+        
         # Apply stvea_correction value
         self.dt_imputed_reference = dt_reference_dataset.copy(deep=True).applymap(
                     lambda x: x - IPD_new._stvea_correction_value if (x != 0 and type(x) is not str) else x)
@@ -2050,7 +2061,7 @@ class ImmunoPhenoDB_Connect:
         testing_features = IPD_new.normalized_counts.copy(deep=True)
         testing_features.rename(columns=IPD_new._ab_ids_dict, inplace=True)    
 
-        print("Predicing cell labels...")
+        print("Predicting cell annotations...")
         # Query decision tree model for predicted labels. This returns a dataframe of the idCLs
         predicted_labels = _rpart_preds(rpart_model=self.dt_rpart_model, 
                                        x_test_df=testing_features, 
@@ -2081,7 +2092,6 @@ class ImmunoPhenoDB_Connect:
         # Make sure the indexes match
         IPD_new._normalized_counts_df = IPD_new._normalized_counts_df.loc[IPD_new._cell_labels_filt_df.index]
 
-        print("Calculating cell type probabilities...")
         # After predicting labels, get the cell type probabilities and calculate the entropies
         cell_probs = _rpart_probs(rpart_model=rpart_model, 
                                  x_test_df=testing_features,
@@ -2429,11 +2439,10 @@ class ImmunoPhenoDB_Connect:
         if distance_ratio:
             if IPD_new.dt_used is True:
                 logging.warning("Unable to perform nearest neighbor distance ratio filtering for decision tree results. Skipping step...")
-                return IPD_new
-            
-            print("Performing nearest neighbor distance ratio filtering...")
-            IPD_new = self._part3_reassign_by_distance_ratio(IPD=IPD_new, distance_ratio_threshold=distance_ratio_threshold)
-            print("Distance_ratio filtering complete.\n")
+            else:
+                print("Performing nearest neighbor distance ratio filtering...")
+                IPD_new = self._part3_reassign_by_distance_ratio(IPD=IPD_new, distance_ratio_threshold=distance_ratio_threshold)
+                print("Distance_ratio filtering complete.\n")
 
         # Call the entropy function if needed
         if entropy:
