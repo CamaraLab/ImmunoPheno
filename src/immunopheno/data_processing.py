@@ -1492,10 +1492,11 @@ class ImmunoPhenoData:
         self._background_cell_z_score = -10
         self._stvea_correction_value = 0
 
-        # Dataframes from run_stvea in the ImmunoPhenoDB_Connect class
+        # Dataframes from run_stvea/run_dt in the ImmunoPhenoDB_Connect class
         self.distance_ratios = None
         self.cell_type_prob = None
         self.entropies = None
+        self.dt_used = False
 
         # If loading in a scanpy object
         if scanpy is not None:
