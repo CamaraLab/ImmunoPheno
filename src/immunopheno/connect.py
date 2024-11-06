@@ -2030,7 +2030,7 @@ class ImmunoPhenoDB_Connect:
             print(f"Number of antibodies matched from database using antibody target: {num_antibodies_matched}")
         elif parse_option == 3:
             print(f"Number of antibodies matched from database using antibody ID: {num_antibodies_matched}")
-        print("Total number of cells returned:", len(dt_rseference_dataset.index))
+        print("Total number of cells returned:", len(dt_reference_dataset.index))
         
         # Apply stvea_correction value
         self.dt_imputed_reference = dt_reference_dataset.copy(deep=True).applymap(
