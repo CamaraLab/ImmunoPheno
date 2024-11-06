@@ -7,6 +7,7 @@ import copy
 import pydot
 import pydotplus
 from importlib.resources import files
+import io
 from io import StringIO
 from PIL import Image, ImageDraw, ImageFont
 
@@ -17,6 +18,10 @@ import numpy as np
 from scipy.stats import entropy
 from sklearn.impute import KNNImputer
 from sklearn.tree import export_graphviz, _tree
+from sklearn.preprocessing import LabelEncoder 
+from rpy2.robjects import pandas2ri, r
+from rpy2.robjects.packages import importr
+from rpy2.robjects import Formula
 
 import plotly.express as px
 import plotly.graph_objects as go
@@ -552,8 +557,9 @@ def _ebi_idCL_map(labels_df: pd.DataFrame) -> dict:
 
 # Functions used for filter_labels
 def _downsample(entire_reference_table: pd.DataFrame,
-               downsample_size: int = 10000,
-               size: int = 50) -> pd.DataFrame:
+               table_size: int = 10000,
+               population_size: int = 50,
+               seed: int = 42) -> pd.DataFrame:
     """
     Downsamples the large reference table to 10,000 rows (cells). 
     Performs downsampling in a controlled randomized order, where
@@ -563,86 +569,59 @@ def _downsample(entire_reference_table: pd.DataFrame,
     Parameters:
         entire_reference_table (pd.DataFrame): original large table
             containing all cells for the given antibodies
-        size (int): the minimum number of cells needed to define 
+        table_size (int): the number of rows to downsample/return
+        population_size (int): the minimum number of cells needed to define 
             a cell type population
     
     Returns:
         entire_reference_table (pd.DataFrame): downsampled 
             reference table
     """
+    np.random.seed(seed)
 
     total_num_cells = len(entire_reference_table.index)
-    
-    # Downsample if number of rows exceeds 10,000
-    if total_num_cells <= downsample_size:
+
+    # Downsample if number of rows is greater than desired table size
+    if total_num_cells <= table_size:
         return entire_reference_table
     else:
         cells_to_keep = []
         combined_dfs = []
-        
+
         # Find all unique idCLs in the table
-        unique_idCLs = list(set(entire_reference_table['idCL']))
+        unique_idCLs = entire_reference_table['idCL'].unique()
 
         # For each idCL, calculate the number of cells present
         for idCL in unique_idCLs:
-            idCL_cells = entire_reference_table.loc[entire_reference_table['idCL'] == idCL]
-
-            # Find number of cells for this cell type
-            list_of_cells = list(idCL_cells.index)
+            idCL_cells = entire_reference_table[entire_reference_table['idCL'] == idCL]
+            list_of_cells = idCL_cells.index.to_list()
             num_idCL_cells = len(list_of_cells)
 
-            # Calculate an adjusted sample_amount for each idCL population to choose from
-            sample_amount = ((num_idCL_cells)/(total_num_cells)) * downsample_size
+            # Calculate an adjusted sample amount for each idCL population to choose from 
+            sample_amount = (num_idCL_cells / total_num_cells) * table_size
+            sample_amount_rounded_up = int(np.ceil(sample_amount))
 
-            # Round up the sample amount
-            sample_amount_rounded_up = math.ceil(sample_amount)
-            
-            if sample_amount_rounded_up > size:
-                # Randomly sample this number of cells from this idCL population
-                sampled_population_index = random.sample(list_of_cells, sample_amount_rounded_up)
-
-                # Add these cells to cells_to_keep
-                cells_to_keep.extend(sampled_population_index)
-
-                # Create a df for just these cells in this cell type
-                temp_df = idCL_cells.loc[sampled_population_index]
-
-                # Add this to combined_dfs
-                combined_dfs.append(temp_df)
-                
+            if sample_amount_rounded_up > population_size:
+                sampled_population_index = np.random.choice(
+                    list_of_cells, sample_amount_rounded_up, replace=False
+                )
+            elif num_idCL_cells > population_size:
+                sampled_population_index = np.random.choice(
+                    list_of_cells, population_size, replace=False
+                )
             else:
-                # If the sample amount was below our threshold, take 50 of the cells remaining
-                if num_idCL_cells > size:
-                    # Take 50 of these cells
-                    smaller_sampled_population_index = random.sample(list_of_cells, size)
+                sampled_population_index = list_of_cells
 
-                    # Add these cells to cells_to_keep
-                    cells_to_keep.extend(smaller_sampled_population_index)
+            cells_to_keep.extend(sampled_population_index)
+            combined_dfs.append(idCL_cells.loc[sampled_population_index])
 
-                    # Create a df for just these cells in this cell type
-                    temp_df = idCL_cells.loc[smaller_sampled_population_index]
-                    
-                    # Add this to combined_dfs
-                    combined_dfs.append(temp_df)
-                    
-                # If there is not even 50 cells in the population, take whatever remains
-                else:
-                    remaining_sample_population_index = list_of_cells
-                    
-                    # Add these cells to cells_to_keep
-                    cells_to_keep.extend(remaining_sample_population_index)
-
-                    # Create a df for just these cells in this cell type
-                    temp_df = idCL_cells.loc[remaining_sample_population_index]
-                    
-                    # Add this to combined_dfs
-                    combined_dfs.append(temp_df)
-
-        if len(cells_to_keep) > downsample_size:
-            reduced_cells_to_keep = random.sample(cells_to_keep, downsample_size)
-            return entire_reference_table.loc[pd.Index(reduced_cells_to_keep)]
+        if len(cells_to_keep) > table_size:
+            reduced_cells_to_keep = np.random.choice(
+                cells_to_keep, table_size, replace=False
+            )
+            return entire_reference_table.loc[reduced_cells_to_keep]
         else:
-            return entire_reference_table.loc[pd.Index(cells_to_keep)]
+            return entire_reference_table.loc[cells_to_keep]
 
 def _pearson_correlation_adjaceny_matrix(pairwise_pearson_correlation_distances):
     # Find the median correlation distance in the entire distance matrix
@@ -1074,6 +1053,119 @@ def _get_leaf_paths(tree, feature_names=None, class_names=None):
     recurse(0, [], paths)
     return paths
 
+#   Rpart Decision Tree functions
+def _rpart_dt_model(x_train_df, y_train_array, **kwargs):
+    """Trains a decision tree model from rpart
+
+    Args:
+        x_train_df (pd.DataFrame): training features retrieved from database.
+            This will have cells as rows and antibody RRIDs as columns. 
+        y_train_array (pd.Series): training labels as cell annotations
+            This will contain a column called "idCL" representing the
+            cell ontology IDs for each cell
+
+    Returns:
+        rpart_model: R object containing a trained decision tree model
+    """
+    # Activate pandas to R data frame conversion
+    pandas2ri.activate()
+
+    # Import rpart library
+    rpart = importr('rpart')
+
+    # Convert data to R dataframes
+    r_x_train_df = pandas2ri.py2rpy(x_train_df)
+    r_y_train = pandas2ri.py2rpy(pd.DataFrame({'target': y_train_array}))
+
+    # Combine training data and target for rpart
+    r_train_data = r['cbind'](r_x_train_df, r_y_train)
+
+    # Define formula for decision tree
+    formula = Formula('target ~ .')
+
+    # Train the model using rpart
+    rpart_model = rpart.rpart(formula, data=r_train_data, method="class", usesurrogate=1, **kwargs)
+
+    return rpart_model
+
+def _rpart_preds(rpart_model, x_test_df, label_encoder):
+    """Retrieve predicted labels using a trained rpart model
+
+    Args:
+        rpart_model (rpart.model): Trained rpart decision tree model
+        x_test_df (pd.DataFrame): Testing features, which should be normalized protein counts
+            from an ImmunoPhenoData object
+        label_encoder (sklearn.preprocessing.LabelEncoder): LabelEncoder used to
+            encode target cell type labels into integers
+
+    Returns:
+        final_df (pd.DataFrame): DataFrame containing cells as rows (index) and a column
+        called "labels"
+    """
+    r_x_test_df = pandas2ri.py2rpy(x_test_df)
+    
+    # Make predictions on the test set
+    preds = r['predict'](rpart_model, r_x_test_df, type="class")
+
+    # convert R predictions to a Python DataFrame
+    preds_py = np.array(preds).flatten() # this step will increment all values by 1
+
+    # Subtract all values from numpy array by 1 (or else LabelEncoder will see unseen labels)
+    preds_py -= 1
+    preds_to_idCL = label_encoder.inverse_transform(preds_py)
+
+    final_df = pd.DataFrame(data=preds_to_idCL, index=x_test_df.index, columns=["labels"])
+
+    return final_df
+
+def _rpart_probs(rpart_model, x_test_df, label_encoder):
+    """Retrieve probabilities of predicted labels for each testing datapoint
+
+    Args:
+        rpart_model (rpart.model): Trained rpart decision tree model
+        x_test_df (pd.DataFrame): Testing features, which should be normalized protein counts
+            from an ImmunoPhenoData object
+        label_encoder (sklearn.preprocessing.LabelEncoder): LabelEncoder used to
+            encode target cell type labels into integers
+
+    Returns:
+        final_df (pd.DataFrame): DataFrame containing cells as rows and columns as 
+        each possible cell type. Each datapoint will contain the probability of that cell
+        being labeled as one of each possible cell type
+    """
+    r_x_test_df = pandas2ri.py2rpy(x_test_df)
+    
+    # make predictions on the test set
+    probs = r['predict'](rpart_model, r_x_test_df, type="prob")
+
+    class_columns = [i for i in range(0, np.array(probs).shape[1])]
+    class_columns_to_idCL = label_encoder.inverse_transform(class_columns)
+    
+    final_df = pd.DataFrame(data=probs, 
+                            index=x_test_df.index, 
+                            columns=class_columns_to_idCL)
+
+    return final_df
+
+def _calculate_entropies_dt(cell_type_probs):
+    """Calculate the entropies of each cell given their cell type probabilities
+
+    Args:
+        cell_type_probs (pd.DataFrame): DataFrame containing each cell type probability for
+        each query cells running rpart
+
+    Returns:
+        entropies_df (pd.DataFrame): DataFrame with cells as rows, and a single column
+        called "entropy"
+    """
+    # Calculate entropy for each query cell
+    entropies = cell_type_probs.apply(lambda row: entropy(row, base=2), axis=1)
+    
+    # Convert the result to a DataFrame
+    entropies_df = entropies.to_frame(name='entropy')
+    
+    return entropies_df
+
 class ImmunoPhenoDB_Connect:
     """A class to interact with the ImmunoPheno database
 
@@ -1106,6 +1198,9 @@ class ImmunoPhenoDB_Connect:
         self._last_stvea_params = None
         self._downsample_pairwise_graph = None
         self._nn_dist = None
+
+        self.dt_imputed_reference = None
+        self.dt_rpart_model = None
 
         if self.url is None:
             raise Exception("Error. Server URL must be provided")
@@ -1574,7 +1669,7 @@ class ImmunoPhenoDB_Connect:
         uses a kNN approach in a consolidated protein expression space to map
         annotations from the reference to query data. This function will find the appropriate
         reference dataset using the spreadsheet provided in the ImmunoPhenoData object. This
-        spreadsheet must contain all antibodies and antibody IDs that were used in that experiment.
+        spreadsheet must contain all antibodies and antibody RRIDs that were used in that experiment.
         For any antibodies in the spreadsheet that are not found in the database, a matching algorithm
         is used to find the next best antibody instead. This level of matching can be
         adjusted in the "parse_option" parameter. This function can be parallelized by specifying
@@ -1849,7 +1944,156 @@ class ImmunoPhenoDB_Connect:
         IPD_new.cell_type_prob = cell_type_sums
         IPD_new.entropies = entropies_df
 
+        # Indicate that a decision tree was NOT used
+        IPD_new.dt_used = False
+
         print("Annotation transfer complete.")
+        return IPD_new
+
+    def run_dt(self,
+               IPD,
+               idBTO: list = None,
+               idExperiment: list = None,
+               parse_option: int = 1,
+               **kwargs):
+        """
+        Predicts cell annotations using a decision tree model (rpart)
+
+        Uses reference data stored in the ImmunoPhenoDB database to annotate cells
+        in a cytometry dataset. This function uses a decision tree model called 
+        Recursive Partitioning and Regression Treees (rpart), which can handle 
+        missing data with the use of surrogate splits. Using the spreadsheet provided
+        in the ImmunoPhenoData object, the function will find the appropriate
+        reference dataset from the database. This spreadsheet must contain all antibodies
+        and antibody RRIDs that were used in that experiment. For any antibodies 
+        in the spreadsheet that are not found in the database, a 
+        matching algorithm is used to find the next best antibody instead. 
+        This level of matching can be adjusted in the "parse_option" parameter.
+
+        Args:
+            IPD (ImmunoPhenoData): ImmunoPhenoData object that must already contain the
+                normalized protein counts and a spreadsheet with all antibody IDs for each
+                antibody used in the experiment.
+            idBTO (list, optional): list of tissue IDs used to restrict the
+                reference dataset. This is optional, but specifying a tissue will greatly
+                improve the accuracy of the annotations.
+            idExperiment (list, optional): list of experiment IDs to restrict
+                the reference dataset. This is optional, but specifying certain experiments
+                can greatly improve the accuracy of the annotations.
+            parse_option (int): level of strictness when searching
+                antibodies in the database. Levels are as follows:
+                    1: parse by clone ID and alias (default)
+                    2: parse by alias and antibody ID (most relaxed)
+                    3: parse by antibody ID (strictest)
+            kwargs: initial arguments for rpart's decision tree model. These parameters are used
+                to modify "rpart.control", which control aspects of the rpart fit.
+                    
+        Returns:
+            ImmunoPhenoData: Returns ImmunoPhenoData object containing transferred annotations
+            accessible in the "labels" property of the new object.
+        """
+               
+        # Target dataset
+        IPD_new = copy.deepcopy(IPD)
+    
+        # Check for normalized protein in target IPD object. This will be the "testing" feature dataset
+        if IPD_new.normalized_counts is None:
+            raise Exception("Error. Normalized protein count data not found in target.")
+    
+        # Retrieve antibody pairs from IPD
+        antibody_pairs = [[key, value] for key, value in IPD_new._ab_ids_dict.items()]
+    
+        # Prepare payload to retrieve reference dataset for decision tree model
+        decision_tree_body = {
+            "antibody_pairs": antibody_pairs,
+            "idBTO": idBTO,
+            "idExperiment": idExperiment,
+            "parse_option": parse_option
+        }
+    
+        print("Retrieving reference dataset...")
+        timeout = (600, 600)
+                   
+        decision_tree_response = requests.post(f"{self.url}/api/decisiontreereference", json=decision_tree_body, timeout=timeout)
+        if 'text/html' in decision_tree_response.headers.get('content-type'):
+            raise Exception(decision_tree_response.text)
+        elif decision_tree_response.status_code == 200:
+            buffer = io.BytesIO(decision_tree_response.content)
+            dt_reference_dataset = pd.read_parquet(buffer)
+    
+        # Apply stvea_correction value
+        self.dt_imputed_reference = dt_reference_dataset.copy(deep=True).applymap(
+                    lambda x: x - IPD_new._stvea_correction_value if (x != 0 and type(x) is not str) else x)
+        
+        # Replace any negative values in the reference dataset with zero
+        self.dt_imputed_reference = self.dt_imputed_reference.applymap(
+            lambda x: 0 if isinstance(x, (int, float)) and x < 0 else x)
+    
+        # Prepare training features and labels
+        training_features = self.dt_imputed_reference.loc[:, self.dt_imputed_reference.columns != 'idCL']
+        training_labels = self.dt_imputed_reference['idCL'].to_frame()
+    
+        # Encode training labels to integers
+        label_encoder = LabelEncoder()
+        training_labels_encoded = label_encoder.fit_transform(training_labels)
+
+        print("Training decision tree model...")
+        # Create a decision tree model
+        rpart_model = _rpart_dt_model(x_train_df=training_features, 
+                                     y_train_array=training_labels_encoded, 
+                                     **kwargs)
+    
+        # Store decision tree model in class
+        self.dt_rpart_model = rpart_model
+            
+        # Prepare testing features
+        testing_features = IPD_new.normalized_counts.copy(deep=True)
+        testing_features.rename(columns=IPD_new._ab_ids_dict, inplace=True)    
+
+        print("Predicing cell labels...")
+        # Query decision tree model for predicted labels. This returns a dataframe of the idCLs
+        predicted_labels = _rpart_preds(rpart_model=self.dt_rpart_model, 
+                                       x_test_df=testing_features, 
+                                       label_encoder=label_encoder)
+        # Convert to cell type names
+        convert_idCL = {
+                "idCL": list(set(predicted_labels['labels']))
+        }
+        convert_idCL_res = requests.post(f"{self.url}/api/convertcelltype", json=convert_idCL)
+        idCL_names = convert_idCL_res.json()["results"]     
+        predicted_labels['celltype'] = predicted_labels['labels'].map(idCL_names)
+    
+        # Before setting norm_cell_types, check if it matches the previous. If not, reset norm_umap field
+        if not (predicted_labels.equals(IPD_new._cell_labels_filt_df)):
+            IPD_new._norm_umap = None
+        IPD_new._cell_labels_filt_df = predicted_labels
+    
+        # Also add labels to the raw cells
+        original_cells_index = IPD_new.protein.index
+        merged_df = IPD_new._cell_labels_filt_df.reindex(original_cells_index)
+        merged_df = merged_df.fillna("Not Assigned")
+    
+        # Check if the raw labels have changed. If so, reset the UMAP field in IPD
+        if not (predicted_labels.equals(IPD_new._cell_labels)):
+            IPD_new._raw_umap = None
+        IPD_new._cell_labels = merged_df
+    
+        # Make sure the indexes match
+        IPD_new._normalized_counts_df = IPD_new._normalized_counts_df.loc[IPD_new._cell_labels_filt_df.index]
+
+        print("Calculating cell type probabilities...")
+        # After predicting labels, get the cell type probabilities and calculate the entropies
+        cell_probs = _rpart_probs(rpart_model=rpart_model, 
+                                 x_test_df=testing_features,
+                                 label_encoder=label_encoder)
+        entropies_df = _calculate_entropies_dt(cell_probs)
+        IPD_new.cell_type_prob = cell_probs
+        IPD_new.entropies = entropies_df
+
+        # Indicate that a decision tree was used
+        IPD_new.dt_used = True
+                   
+        print("Annotation prediction complete.")
         return IPD_new
 
     def _part1_localization(self, IPD, p_threshold=0.05):
@@ -1872,7 +2116,7 @@ class ImmunoPhenoDB_Connect:
         
             # Downsample to 5000 cells and get pairwise distance matrix
             print("Downsampling dataset to 5000 cells...")
-            ds_norm = _downsample(norm_combine, downsample_size=5000)
+            ds_norm = _downsample(norm_combine, table_size=5000)
         
             # Calculate the pairwise correlation distances between all rows (cells)
             print("Calculating pairwise distances between cells...")
@@ -1960,7 +2204,7 @@ class ImmunoPhenoDB_Connect:
         
             # Downsample to 5000 cells and get pairwise distance matrix
             print("Downsampling dataset to 5000 cells...")
-            ds_norm = _downsample(norm_combine, downsample_size=5000)
+            ds_norm = _downsample(norm_combine, table_size=5000)
         
             # Calculate the pairwise correlation distances between all rows (cells)
             print("Calculating pairwise distances between cells...")
@@ -2071,17 +2315,15 @@ class ImmunoPhenoDB_Connect:
         return temp_copy
     
     def _part4_reassign_by_entropy(self, IPD, entropy_threshold=10):
-        if self.transfer_matrix is None or self.imputed_reference is None:
-            raise Exception("Missing transfer_matrix/imputed_reference. run_stvea() must be called to filter by entropies.")
-        
-        cell_labels_df = IPD.labels
-        
-        # Find cell indices for each cell type
-        cell_indices_by_type = _group_cells_by_type(self.imputed_reference)
+        if IPD.labels is None and (IPD.cell_type_prob is None or IPD.entropies is not None):
+            raise Exception("Missing labels. run_stvea() or run_dt() must be called to filter labels by entropies.")
 
-        # Calculate entropies for each cell type for each query cell in transfer matrix
-        cell_type_sums, entropies_df = _calculate_entropies_fast(self.transfer_matrix, cell_indices_by_type)
-        
+        # Retrieve cell_type_prob and entropies in IPD, from run_stvea or run_dt
+        if IPD.cell_type_prob is not None and IPD.entropies is not None:
+            entropies_df = IPD.entropies
+
+        cell_labels_df = IPD.labels
+            
         # Find all rows/cells with a ratio greater than the threshold
         cells_to_unlabel = entropies_df[entropies_df["entropy"] > entropy_threshold]
         
@@ -2185,6 +2427,10 @@ class ImmunoPhenoDB_Connect:
 
         # Call the distance_ratio function if needed
         if distance_ratio:
+            if IPD_new.dt_used is True:
+                logging.warning("Unable to perform nearest neighbor distance ratio filtering for decision tree results. Skipping step...")
+                return IPD_new
+            
             print("Performing nearest neighbor distance ratio filtering...")
             IPD_new = self._part3_reassign_by_distance_ratio(IPD=IPD_new, distance_ratio_threshold=distance_ratio_threshold)
             print("Distance_ratio filtering complete.\n")
