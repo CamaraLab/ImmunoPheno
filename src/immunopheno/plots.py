@@ -1,5 +1,6 @@
 import seaborn as sns
 import plotly.express as px
+import logging
 import umap
 
 from .data_processing import _correlation_ab, PlotUMAPError, ImmunoPhenoData
@@ -30,23 +31,26 @@ def plot_filter_metrics(IPD: ImmunoPhenoData):
         None. Renders two plotly histograms.  
     """
     # Check if distance ratios and entropies exists
-    if IPD.distance_ratios is None or IPD.entropies is None:
-        raise Exception("Missing distance ratios or entropies. Call run_stvea() first to use plot_filter_metrics()")
-    
+    if IPD.distance_ratios is None and IPD.entropies is None:
+        raise Exception("Missing distance ratios and entropies. Call run_stvea() or run_dt() first to use plot_filter_metrics()")
+    elif IPD.distance_ratios is None and IPD.entropies is not None:
+        logging.warning("Unable to find distance_ratios. Only entropies will be plotted")
+
     ratio = IPD.distance_ratios
     entropies_df = IPD.entropies
 
-    # Plot a histogram of all ratio values to decide on the ratio_threshold
-    ratio_fig = px.histogram(ratio["ratio"], title="D1/D2 Ratios For All Query Cells" + 
-                        "<br>" +
-                        "<sup>D1: Average distance between nearest neighbor and query cell</sup>" +
-                        "<br>" + 
-                        "<sup>D2: Average pairwise distance among nearest neighbors</sup>").update_layout(height=500)
-    ratio_fig.show()
+    if ratio is not None:
+        # Plot a histogram of all ratio values to decide on the ratio_threshold
+        ratio_fig = px.histogram(ratio["ratio"], title="D1/D2 Ratios For All Query Cells" + 
+                            "<br>" +
+                            "<sup>D1: Average distance between nearest neighbor and query cell</sup>" +
+                            "<br>" + 
+                            "<sup>D2: Average pairwise distance among nearest neighbors</sup>").update_layout(height=500)
+        ratio_fig.show()
 
-
-    entropy_fig = px.histogram(entropies_df["entropy"], title="Entropies For All Query Cells").update_layout(height=500)
-    entropy_fig.show()
+    if entropies_df is not None:
+        entropy_fig = px.histogram(entropies_df["entropy"], title="Entropies For All Query Cells").update_layout(height=500)
+        entropy_fig.show()
 
 def plot_UMAP(IPD: ImmunoPhenoData,
               normalized: bool = False,
