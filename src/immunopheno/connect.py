@@ -6,6 +6,7 @@ import warnings
 import copy
 import pydot
 import pydotplus
+from collections import defaultdict
 from importlib.resources import files
 import io
 from io import StringIO
@@ -525,12 +526,15 @@ def _impute_dataset_by_type(downsampled_df, rho):
     print("Number of antibodies imputed:", num_columns_with_na)
 
     num_rows_with_na = original_remains.isna().any(axis=1).sum()
-    print("Total number of cells returned:", len(final_index))
     print("Number of cells imputed:", num_rows_with_na)
 
     # Find which rows (cells) were NAs. From those cells, find number of unique cell types
     na_rows = original_remains[original_remains.isna().any(axis=1)]
     print("Number of cell types imputed:", len(set(na_rows["idCL"])))
+
+    # Final table
+    print("Remaining number of antibodies after imputation:", len(combined_imputed_df_with_idCL.columns) - 1) # ignore "idCL" column
+    print("Remaining number of cells after imputation:", len(final_index))
     
     return combined_imputed_df_with_idCL
 
@@ -978,7 +982,7 @@ def _calculate_entropies_fast(transfer_matrix, cell_indices_by_type):
     
     return cell_type_sums, entropies_df
 
-# Pruning decision tree leaves with the same class
+# Antibody Panel: Pruning decision tree leaves with the same class
 def _is_leaf(tree, node_id):
     """Check if a node is a leaf node in a sklearn tree"""
     return tree.children_left[node_id] == _tree.TREE_LEAF and tree.children_right[node_id] == _tree.TREE_LEAF
@@ -1011,7 +1015,7 @@ def _prune_tree(tree, node_id=0):
 
     return None
 
-# Getting paths to each leaf node in the decision tree
+#   Getting paths to each leaf node in the decision tree
 def _get_leaf_paths(tree, feature_names=None, class_names=None):
     """
     Get all paths to leaf nodes in a decision tree.
@@ -1053,7 +1057,37 @@ def _get_leaf_paths(tree, feature_names=None, class_names=None):
     recurse(0, [], paths)
     return paths
 
-#   Rpart Decision Tree functions
+#   Merging similar antibodies by target or clone ID
+def _get_column_groups(column_dict, df):
+    "Finds and groups together antibodies (keys) that share the same target/cloneID (value)"
+    groups = defaultdict(list)
+    
+    # Group columns by their labels, only if they exist in the DataFrame
+    for column, group in column_dict.items():
+        if column in df.columns:
+            groups[group].append(column)
+    
+    return list(groups.values())
+
+def _merge_columns(df, column_groups):
+    "Merges columns together based on a list of provided groups"
+    merged_df = pd.DataFrame()
+    
+    for group in column_groups:
+        # Skip empty groups or groups with only one column (no merge needed)
+        if not group or len(group) == 1:
+            new_column_name = group[0] if group else None
+            merged_df[new_column_name] = df[group[0]] if new_column_name else None
+        else:
+            # Concatenate the column names for the new column name
+            new_column_name = "_".join(group)
+            
+            # Merge columns in the group using bfill and select the first non-NaN value in each row
+            merged_df[new_column_name] = df[group].bfill(axis=1).iloc[:, 0]
+    
+    return merged_df
+
+# Rpart Decision Tree functions
 def _rpart_dt_model(x_train_df, y_train_array, **kwargs):
     """Trains a decision tree model from rpart
 
@@ -1201,6 +1235,9 @@ class ImmunoPhenoDB_Connect:
 
         self.dt_imputed_reference = None
         self.dt_rpart_model = None
+
+        self._last_antibody_panel_params = None
+        self._original_antibody_panel_reference = None
 
         if self.url is None:
             raise Exception("Error. Server URL must be provided")
@@ -2512,7 +2549,8 @@ class ImmunoPhenoDB_Connect:
                         background: list = None,
                         tissue: list = None,
                         experiment: list = None,
-                        seed: int = 42) -> dict: 
+                        seed: int = 42,
+                        merge_option: int = 1) -> dict: 
                 
         # Client side sanitization
         if len(target) == 0:
@@ -2613,31 +2651,83 @@ class ImmunoPhenoDB_Connect:
             final_target_idBTOs = target_idBTOs
             final_background_idBTOs = modified_background_family_idBTOs
 
-        # JSON payload will have 5 parts as lists
-        antibody_panel_payload = {
-            "target_idcl": unique_target_family_idCLs,
-            "target_idbto": final_target_idBTOs,
-            "background_idcl": modified_background_family_idCLs,
-            "background_idbto": final_background_idBTOs,
-            "experiment": experiment,
-            "seed": seed
-        }
+        # Check if reference query parameters have changed OR reference table prior to making API call
+        if (target, background, tissue, experiment, 
+            seed) != self._last_antibody_panel_params or self._original_antibody_panel_reference is None:
 
-        print("Retrieving antibody panel reference data...")
-        abPanel_response = requests.post(f"{self.url}/api/antibodypanelreference", json=antibody_panel_payload)
-        if 'text/html' in abPanel_response.headers.get('content-type'):
-            raise Exception(abPanel_response.text)
-        elif 'application/json' in abPanel_response.headers.get('content-type'):
-            res_JSON = abPanel_response.json()
-            res_df = pd.DataFrame.from_dict(res_JSON)
+            # JSON payload will have 5 parts as lists
+            antibody_panel_payload = {
+                "target_idcl": unique_target_family_idCLs,
+                "target_idbto": final_target_idBTOs,
+                "background_idcl": modified_background_family_idCLs,
+                "background_idbto": final_background_idBTOs,
+                "experiment": experiment,
+                "seed": seed
+            }
+
+            print("Retrieving antibody panel reference data...")
+            abPanel_response = requests.post(f"{self.url}/api/antibodypanelreference", json=antibody_panel_payload)
+            if 'text/html' in abPanel_response.headers.get('content-type'):
+                raise Exception(abPanel_response.text)
+            elif 'application/json' in abPanel_response.headers.get('content-type'):
+                res_JSON = abPanel_response.json()
+                res_df = pd.DataFrame.from_dict(res_JSON)
+
+            # Before continuing, check if dataframe is empty
+            if len(res_df) == 0:
+                raise Exception("Unable to find reference table. Please try again with different parameters.")
+
+            # Store this in the class for now
+            self._original_antibody_panel_reference = res_df
+
+            # Store these params to check for subsequent function calls
+            self._last_antibody_panel_params = (target, background, tissue, experiment, seed)
                         
-        # Keep track of cells originally marked as background
-        background_cells_to_relabel = res_df[res_df['background'] == True].index
-        res_df_no_background_column = res_df.drop(columns=["background"], inplace=False)
+         # Keep track of cells originally marked as background
+        background_cells_to_relabel = self._original_antibody_panel_reference[self._original_antibody_panel_reference['background'] == True].index
+        res_df_no_background_column = self._original_antibody_panel_reference.drop(columns=["background"], inplace=False)
+        print("Initial number of antibodies in reference:", len(res_df_no_background_column.columns) - 2) # Ignore "idCL" and "idExperiment column 
+
+        # Merging antibodies
+        # Make an API call to the server to get the "antibodies" table from the database
+        antibodies_table_res = requests.get(f"{self.url}/api/antibodiestable")
+        antibodies_JSON = antibodies_table_res.json()
+        antibodies_table = pd.DataFrame.from_dict(antibodies_JSON)
+        antibodies_table["idAntibody_renamed"] = antibodies_table["idAntibody"] + " (" + antibodies_table["abTarget"] + ")"
+
+        if merge_option == 1:
+            print("Merging antibodies by clone ID...")
+            clone_dict = dict(zip(antibodies_table['idAntibody_renamed'], antibodies_table['cloneID']))
+            clone_ab_groups = _get_column_groups(clone_dict, res_df_no_background_column)
+            df_to_impute = _merge_columns(res_df_no_background_column, clone_ab_groups)
+
+            # Add back in the idCL column (needed for imputation)
+            df_to_impute["idCL"] = res_df_no_background_column["idCL"]
+            
+            num_columns_merged = len(res_df_no_background_column.columns) - len(df_to_impute.columns)
+            print("Number of antibodies merged:", num_columns_merged)
+            print("Remaining antibodies after merging:", len(df_to_impute.columns))
+        
+        elif merge_option == 2:
+            print("Merging antibodies by antibody target...")
+            abTarget_dict = dict(zip(antibodies_table['idAntibody_renamed'], antibodies_table['abTarget']))
+            abTarget_ab_groups = _get_column_groups(abTarget_dict, res_df_no_background_column)
+            df_to_impute = _merge_columns(res_df_no_background_column, abTarget_ab_groups)
+
+            # Add back in the idCL column (needed for imputation)
+            df_to_impute["idCL"] = res_df_no_background_column["idCL"]
+            
+            num_columns_merged = len(res_df_no_background_column.columns) - len(df_to_impute.columns)
+            print("Number of antibodies merged:", num_columns_merged)
+            print("Remaining antibodies after merging:", len(df_to_impute.columns))
+            
+        else:
+            df_to_impute = res_df_no_background_column
+            print("Skipping antibody merging...")
 
         # Impute missing values in
         print("Imputing missing values...")
-        imputed_ab_panel = _impute_dataset_by_type(res_df_no_background_column, rho=rho)
+        imputed_ab_panel = _impute_dataset_by_type(df_to_impute, rho=rho)
         # Re-assign background cells earlier as "Other" for their cell type
         indices_to_update = imputed_ab_panel.index.intersection(background_cells_to_relabel)
         imputed_ab_panel.loc[indices_to_update, 'idCL'] = "Other"
@@ -2658,7 +2748,8 @@ class ImmunoPhenoDB_Connect:
                                plot_gates_option: int = 1,
                                rho: float = 0.1,
                                shift: int = 0,
-                               seed: int = 42) -> pd.DataFrame:
+                               seed: int = 42,
+                               merge_option: int = 1) -> pd.DataFrame:
         """Finds an optimized panel of antibodies to mark cell populations and tissues
 
         Uses reference data stored in the ImmunoPhenoDB database to generate a panel
@@ -2689,12 +2780,17 @@ class ImmunoPhenoDB_Connect:
                 "3": displays an interactive plot using Dash. Must be viewed in a browser at 127.0.0.1:8050
                 Defaults to 1.
             rho (float, optional): weight parameter to adjust the number of cells or antibodies in the reference dataset. 
-                A small value of rho will provide more cells and less antibodies. 
-                A large value of rho will provide more antibodies and less cells. Defaults to 0.1.
+                A small value of rho will provide more cells and fewer antibodies. 
+                A large value of rho will provide more antibodies and fewer cells. Defaults to 0.1.
             shift (int, optional): value subtracted from all protein expression counts 
                 in the antibody panel reference dataset. A larger value for the shift will lead to less
                 discrete populations in the gating plots. Defaults to 0 (no shift applied).
             seed (int, optional): seed value when randomly downsampling the reference table in the server
+            merge_option (int, optional): merge antibodies together based on a similar field
+                "1": merges all antibodies in the panel that share the same clone ID
+                "2": merges all antibodies in the panel that share the same antibody target
+                    Example: 'AB_2734345 (CD7)' and 'AB_2800914 (CD7)' becomes 'AB_2734345 (CD7)_AB_2800914 (CD7)'
+                "3": no merging performed, antibodies remain individual
 
         Returns:
             tuple: Returns a tuple (pd.DataFrame, pd.DataFrame).
@@ -2713,7 +2809,8 @@ class ImmunoPhenoDB_Connect:
                                                 background=background,
                                                 tissue=tissue,
                                                 experiment=experiment,
-                                                seed=seed)
+                                                seed=seed,
+                                                merge_option=merge_option)
         # Apply correction value
         self.antibody_panel_imputed_reference = imputed_ab_panel.copy(deep=True).applymap(
             lambda x: x - shift if isinstance(x, (int, float)) and x != 0 else x)
