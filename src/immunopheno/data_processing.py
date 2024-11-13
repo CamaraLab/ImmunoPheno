@@ -1884,9 +1884,9 @@ class ImmunoPhenoData:
 
         # Fitting a single antibody using its name
         if isinstance(input, str):
-            # if input in self._protein_matrix.columns:
+            # Use the original protein counts prior to applying any transformations
             try:
-                data_vector = list(self._protein_matrix.loc[:, input].values)
+                data_vector = list(self._temp_protein.loc[:, input].values)
                 # Also set ab_name to input, since input is the string of the antibody
                 ab_name = input
                 individual = True
@@ -1898,7 +1898,7 @@ class ImmunoPhenoData:
 
             except:
                 raise AntibodyLookupError(f"'{input}' not found in protein data.")
-        # Fitting all antibodies at once
+        # Using the array of antibody counts itself (when fitting all antibodies at once)
         else:
             data_vector = input
 
@@ -1978,9 +1978,8 @@ class ImmunoPhenoData:
         fit_all_results = []
 
         for ab in tqdm(self._protein_matrix, total=len(self._protein_matrix.columns)):
-            # if plot: # Print antibody name if plotting
-                # print("Antibody:", ab)
-            fits = self.fit_antibody(input=self._protein_matrix.loc[:, ab],
+            # Use original antibody counts each time to avoid compounding transformations
+            fits = self.fit_antibody(input=self._temp_protein.loc[:, ab],
                                     ab_name=ab,
                                     transform_type=transform_type,
                                     transform_scale=transform_scale,
