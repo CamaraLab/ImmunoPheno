@@ -2746,8 +2746,8 @@ class ImmunoPhenoDB_Connect:
                                plot_decision_tree: bool = False,
                                plot_gates: bool = False,
                                plot_gates_option: int = 1,
-                               rho: float = 0.1,
-                               shift: int = 0,
+                               rho: float = 0.5,
+                               shift: int = 8,
                                seed: int = 42,
                                merge_option: int = 1) -> pd.DataFrame:
         """Finds an optimized panel of antibodies to mark cell populations and tissues
