@@ -1946,9 +1946,10 @@ class ImmunoPhenoDB_Connect:
         IPD_new._cell_labels_filt_df = complete_labels_df
         
         # Add labels to raw cell labels as well. The filtered rows will be marked as "filtered_by_stvea"
+        # 11/22/2024 - change to "Not Assigned" for simplicity
         original_cells_index = IPD_new.protein.index
         merged_df = IPD_new._cell_labels_filt_df.reindex(original_cells_index)
-        merged_df = merged_df.fillna("filtered_by_stvea")
+        merged_df = merged_df.fillna("Not Assigned")
 
         # Check if the raw and norm labels have changed. If so, reset the UMAP field in IPD
         if not (merged_df.equals(IPD_new._cell_labels)):
