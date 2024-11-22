@@ -55,6 +55,7 @@ def plot_filter_metrics(IPD: ImmunoPhenoData):
 def plot_UMAP(IPD: ImmunoPhenoData,
               normalized: bool = False,
               force_update: bool = False,
+              random_state: int = 42,
               **kwargs):
     """ Plots a UMAP for the non-normalized protein values or normalized protein values
 
@@ -63,6 +64,7 @@ def plot_UMAP(IPD: ImmunoPhenoData,
             gene data, and cell types
         normalized (bool): option to plot normalized values
         force_update (bool): option to compute a new UMAP, replacing stored plots
+        random_state (int): seed value for generating the UMAP
         **kwargs: various arguments to UMAP class constructor, including default values:
             n_neighbors (int): 15
             min_dist (float): 0.1 
@@ -74,17 +76,17 @@ def plot_UMAP(IPD: ImmunoPhenoData,
         legend of cell type (if available)
     """
     # Check if existing UMAP is present in class AND UMAP parameters have not changed
-    if (IPD._umap_kwargs == kwargs and IPD._raw_umap is not None) and normalized is False and force_update is False:
+    if (IPD._umap_kwargs == (random_state, kwargs) and IPD._raw_umap is not None) and normalized is False and force_update is False:
         # If so, return the stored UMAP
         return IPD._raw_umap
-    elif (IPD._umap_kwargs == kwargs and IPD._norm_umap is not None) and normalized is True and force_update is False:
+    elif (IPD._umap_kwargs == (random_state, kwargs) and IPD._norm_umap is not None) and normalized is True and force_update is False:
         return IPD._norm_umap
     else:
         # If no UMAP or kwargs are different, generate a new one and store in class
-        umap_plot = umap.UMAP(random_state=0, **kwargs)
+        umap_plot = umap.UMAP(random_state=random_state, **kwargs)
 
         # Store new kwargs in class
-        IPD._umap_kwargs = kwargs
+        IPD._umap_kwargs = (random_state, kwargs)
         
         if normalized:
             try:
