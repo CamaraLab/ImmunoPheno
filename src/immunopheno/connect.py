@@ -2510,6 +2510,19 @@ class ImmunoPhenoDB_Connect:
         
         # Make sure all "Not Assigned" rows are consistent in both "labels" and "celltypes" column of IPD.labels
         IPD_new.labels.loc[IPD_new.labels["labels"] == "Not Assigned", "celltype"] = "Not Assigned"
+
+        # Fill in cells that were filtered/not labelled in the regular protein data
+        # These will be called "Not Assigned"
+        original_cells_index = IPD_new.protein.index
+        merged_df = IPD_new._cell_labels_filt_df.reindex(original_cells_index)
+        merged_df = merged_df.fillna("Not Assigned")
+        IPD_new._cell_labels = merged_df
+
+        # Since we filtered labels, reset the UMAP fields
+        IPD_new._raw_umap = None
+        IPD_new._norm_umap = None
+        
+        # Keep track of all normalized cells that were labelled as "Not Assigned"
         affected_cells_index = IPD_new.labels[IPD_new.labels["labels"] == "Not Assigned"].index
         
         # Remove all rows/cells that had "Not Assigned"
