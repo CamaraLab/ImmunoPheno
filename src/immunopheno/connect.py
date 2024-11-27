@@ -1200,6 +1200,14 @@ def _calculate_entropies_dt(cell_type_probs):
     
     return entropies_df
 
+def _reverse_fam_dict(fam_dict):
+    reversed_dict = {}
+    for key, value in fam_dict.items():
+        reversed_dict[key] = key
+        for child in value:
+            reversed_dict[child] = key
+    return reversed_dict
+
 class ImmunoPhenoDB_Connect:
     """A class to interact with the ImmunoPheno database
 
@@ -2683,8 +2691,12 @@ class ImmunoPhenoDB_Connect:
 
             # Store these params to check for subsequent function calls
             self._last_antibody_panel_params = (target, background, tissue, experiment, seed)
+
+        # Re-name any descendants in the target to their parent idCL. Keep the non-target (background) idCLs untouched for now
+        reversed_dict = _reverse_fam_dict(target_node_fam_dict)
+        self._original_antibody_panel_reference["idCL"] = self._original_antibody_panel_reference["idCL"].map(reversed_dict).fillna(self._original_antibody_panel_reference['idCL'])
                         
-         # Keep track of cells originally marked as background
+        # Keep track of cells originally marked as background
         background_cells_to_relabel = self._original_antibody_panel_reference[self._original_antibody_panel_reference['background'] == True].index
         res_df_no_background_column = self._original_antibody_panel_reference.drop(columns=["background"], inplace=False)
         print("Initial number of antibodies in reference:", len(res_df_no_background_column.columns) - 2) # Ignore "idCL" and "idExperiment column 
