@@ -2152,7 +2152,7 @@ class ImmunoPhenoDB_Connect:
         print("Annotation prediction complete.")
         return IPD_new
 
-    def _part1_localization(self, IPD, p_threshold=0.05, table_size=10000):
+    def _part1_localization(self, IPD, p_threshold=0.05, table_size=5000):
         # We will be working with the normalized_counts and labels in the IPD object
         # First, we will need to ignore all initial cells labeled as "Not Assigned"
         filtered_index = IPD.labels[IPD.labels['labels'] != 'Not Assigned'].index
@@ -2236,7 +2236,7 @@ class ImmunoPhenoDB_Connect:
         print(f"Renamed {len(affected_cells_index)} cells.")
         return temp_copy
 
-    def _part2_merging(self, IPD, p_threshold=0.05, epsilon=4, table_size=10000):
+    def _part2_merging(self, IPD, p_threshold=0.05, epsilon=4, table_size=5000):
         # Create a deepcopy of the OWL graph. This one will be constantly updated
         owl_graph_deepcopy = copy.deepcopy(self._OWL_graph)
 
@@ -2429,8 +2429,8 @@ class ImmunoPhenoDB_Connect:
                       epsilon_merging=4,                # Epsilon value for deciding to merge two cell types based on proportion ratio
                       distance_ratio_threshold=2,       # Ratio threshold when filtering cells by NN distance ratios (D1/D2)
                       entropy_threshold=2,              # Entropy threshold when filtering cells by total entropy for cell types
-                      remove_labels=False,
-                      graph_size=10000):             # Remove cells as "Not Assigned" at the end of filtering:             
+                      remove_labels=False,              # Remove cells as "Not Assigned" at the end of filtering
+                      graph_size=5000):                          
         """Filters out poor-quality annotations using the protein expression space
 
         Args:
