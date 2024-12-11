@@ -2152,7 +2152,7 @@ class ImmunoPhenoDB_Connect:
         print("Annotation prediction complete.")
         return IPD_new
 
-    def _part1_localization(self, IPD, p_threshold=0.05, table_size=5000):
+    def _part1_localization(self, IPD, p_threshold=0.05):
         # We will be working with the normalized_counts and labels in the IPD object
         # First, we will need to ignore all initial cells labeled as "Not Assigned"
         filtered_index = IPD.labels[IPD.labels['labels'] != 'Not Assigned'].index
@@ -2171,8 +2171,8 @@ class ImmunoPhenoDB_Connect:
             ct_lookup = norm_counts_labels["idCL"].to_dict()
         
             # Downsample to 5000 cells and get pairwise distance matrix
-            print(f"Downsampling dataset to {table_size} cells...")
-            ds_norm = _downsample(norm_combine, table_size=table_size)
+            print(f"Downsampling dataset to 5000 cells...")
+            ds_norm = _downsample(norm_combine, table_size=5000)
         
             # Calculate the pairwise correlation distances between all rows (cells)
             print("Calculating pairwise distances between cells...")
@@ -2236,7 +2236,7 @@ class ImmunoPhenoDB_Connect:
         print(f"Renamed {len(affected_cells_index)} cells.")
         return temp_copy
 
-    def _part2_merging(self, IPD, p_threshold=0.05, epsilon=4, table_size=5000):
+    def _part2_merging(self, IPD, p_threshold=0.05, epsilon=4):
         # Create a deepcopy of the OWL graph. This one will be constantly updated
         owl_graph_deepcopy = copy.deepcopy(self._OWL_graph)
 
@@ -2259,8 +2259,8 @@ class ImmunoPhenoDB_Connect:
             ct_lookup = norm_counts_labels["idCL"].to_dict()
         
             # Downsample to 5000 cells and get pairwise distance matrix
-            print(f"Downsampling dataset to {table_size} cells...")
-            ds_norm = _downsample(norm_combine, table_size=table_size)
+            print(f"Downsampling dataset to 5000 cells...")
+            ds_norm = _downsample(norm_combine, table_size=5000)
         
             # Calculate the pairwise correlation distances between all rows (cells)
             print("Calculating pairwise distances between cells...")
@@ -2429,8 +2429,8 @@ class ImmunoPhenoDB_Connect:
                       epsilon_merging=4,                # Epsilon value for deciding to merge two cell types based on proportion ratio
                       distance_ratio_threshold=2,       # Ratio threshold when filtering cells by NN distance ratios (D1/D2)
                       entropy_threshold=2,              # Entropy threshold when filtering cells by total entropy for cell types
-                      remove_labels=False,              # Remove cells as "Not Assigned" at the end of filtering
-                      graph_size=5000):                          
+                      remove_labels=False):              # Remove cells as "Not Assigned" at the end of filtering
+                          
         """Filters out poor-quality annotations using the protein expression space
 
         Args:
@@ -2500,13 +2500,13 @@ class ImmunoPhenoDB_Connect:
         # Call the localization function if needed
         if localization:
             print("Performing localization...")
-            IPD_new = self._part1_localization(IPD=IPD_new, p_threshold=p_threshold_localization, table_size=graph_size)
+            IPD_new = self._part1_localization(IPD=IPD_new, p_threshold=p_threshold_localization)
             print("Localization complete.\n")
 
         # Call the merging function if needed
         if merging:
             print("Performing merging...")
-            IPD_new = self._part2_merging(IPD=IPD_new, p_threshold=p_threshold_merging, epsilon=epsilon_merging, table_size=graph_size)
+            IPD_new = self._part2_merging(IPD=IPD_new, p_threshold=p_threshold_merging, epsilon=epsilon_merging)
             print("Merging complete.\n")
         
         # Make sure all "Not Assigned" rows are consistent in both "labels" and "celltypes" column of IPD.labels
