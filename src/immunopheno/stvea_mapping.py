@@ -150,7 +150,6 @@ class Mapping:
                 'cellsr': ref_emb.index.values, 'cellsq': query_emb.index.values}
                 nn_rr and nn_qq are also dictionary that contain "nn_idx" and "nn_dists"
         """
-        np.random.seed(0)
         
         nn_rr = dict()
         nn_qq = dict()
