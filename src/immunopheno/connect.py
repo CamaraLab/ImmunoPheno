@@ -946,7 +946,7 @@ def _calculate_D1_D2_ratio(D1, D2):
     combined = pd.concat([D1, D2], axis=1)
 
     # Calculate the ratio now for nn_distance/pairwise_distance
-    combined['ratio'] = combined['avg_nn_distance'] / combined['avg_pairwise_distance']
+    combined['ratio'] = np.log10(combined['avg_nn_distance'] / combined['avg_pairwise_distance'])
     return combined
 
 #   Part 4 Filtering (Requires run_stvea() output: transfer matrix and imputed reference dataset from server)
