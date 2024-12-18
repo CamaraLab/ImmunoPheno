@@ -1242,7 +1242,7 @@ def _normalize_antibody(fit_results: dict,
         else:
             # For all a' values (non 0), calculate the mean and standard deviation
             norm_sig_mean = np.mean(norm_signal_counts)
-            norm_sig_stdev = np.stdev(norm_signal_counts)
+            norm_sig_stdev = np.std(norm_signal_counts)
 
             # Find the z_scores
             for count in normalized_counts:
