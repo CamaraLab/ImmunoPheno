@@ -1,4 +1,3 @@
-import statistics
 import warnings
 import logging
 import csv
@@ -744,8 +743,8 @@ def _z_scores(fit_results: dict,
                          in zip(data_vector, classified_cells)
                          if matrix_status == 0]
 
-    # Find mean of background cells ( for z score calculation)
-    background_mean = statistics.mean(background_counts)
+    # Find mean of background cells (for z score calculation)
+    background_mean = np.mean(background_counts)
 
     # Find standard deviation of background cells (for z score calculation)
     background_stdev = np.std(background_counts)
@@ -1138,11 +1137,23 @@ def _normalize_antibody(fit_results: dict,
         normalized_counts = []
         normalized_z_scores = []
 
-        # Get background mean and standard deviation of either GMM or NB model
-        background_mean, background_std = _bg_mean_std(fit_results)
+        # Get background mean and standard deviation of either GMM or NB model (population statistics)
+        # background_mean, background_std = _bg_mean_std(fit_results)
 
         # Get the classified cell vector for this antibody
         classified_cells = classified_filt_df[ab_name].values
+
+        # Find all background cells in data vector (using sample statistics here instead, since z scores used them)
+        background_counts = [val
+                            for val, matrix_status
+                            in zip(data_vector, classified_cells)
+                            if matrix_status == 0]
+
+        # Find mean of background cells ( for z score calculation)
+        background_mean = np.mean(background_counts)
+
+        # Find standard deviation of background cells (for z score calculation)
+        background_std = np.std(background_counts)
 
         # Raw data vector
         for i, (cell_name, cell_count) in enumerate(data_vector.items()):
@@ -1230,8 +1241,8 @@ def _normalize_antibody(fit_results: dict,
             return normalized_z_scores
         else:
             # For all a' values (non 0), calculate the mean and standard deviation
-            norm_sig_mean = statistics.mean(norm_signal_counts)
-            norm_sig_stdev = statistics.stdev(norm_signal_counts)
+            norm_sig_mean = np.mean(norm_signal_counts)
+            norm_sig_stdev = np.stdev(norm_signal_counts)
 
             # Find the z_scores
             for count in normalized_counts:
