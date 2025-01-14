@@ -53,10 +53,6 @@ intersphinx_disabled_domains = ['std']
 
 templates_path = ['_templates']
 
-# -- Mocking external dependencies
-# Mock `rpy2` and any other modules that are not available during the build.
-autodoc_mock_imports = ['rpy2']
-
 # -- Options for HTML output
 
 html_theme = 'sphinx_rtd_theme'
