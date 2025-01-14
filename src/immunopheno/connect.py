@@ -1705,6 +1705,7 @@ class ImmunoPhenoDB_Connect:
                   mask_threshold: float = 0.75,
                   mask: bool = True,
                   seed: int = 42,
+                  map_seed: int = 42,
                   num_chunks: int = 1,
                   num_cores: int = 1):
         """Automatically transfers single cell annotations to cytometry data
@@ -1759,6 +1760,7 @@ class ImmunoPhenoDB_Connect:
             mask (bool): a boolean value to specify whether to discard 
                 query cells that don't have nearby reference cells. Defaults to True.
             seed (int, optional): seed value when randomly downsampling the reference table in the server
+            map_seed (int, optional): seed value when finding anchors during the mapping from reference to query
             num_chunks (int): number of chunks to split the protein dataset for parallelization. Defaults to 1.
             num_cores (int): number of cores used to run in parallel. Defaults to 1.
 
@@ -1820,27 +1822,6 @@ class ImmunoPhenoDB_Connect:
 
             print("Retrieving reference dataset...")
             timeout = (600, 600) # connection, read timeout
-            # stvea_response = requests.post(f"{self.url}/api/stveareference", json=stvea_body, timeout=timeout)
-            # if 'text/html' in stvea_response.headers.get('content-type'):
-            #     raise Exception(stvea_response.text)
-            # elif 'application/json' in stvea_response.headers.get('content-type'):
-            #     res_JSON = stvea_response.json()
-            #     reference_dataset = pd.DataFrame.from_dict(res_JSON)
-
-            # # Output statistics on the number of antibodies matched
-            # columns_to_exclude = ["idCL", "idExperiment"]
-            # num_antibodies_matched = (~reference_dataset.columns.isin(columns_to_exclude)).sum()
-            # if parse_option == 1:
-            #     print(f"Number of antibodies matched from database using clone ID: {num_antibodies_matched}")
-            # elif parse_option == 2:
-            #     print(f"Number of antibodies matched from database using antibody target: {num_antibodies_matched}")
-            # elif parse_option == 3:
-            #     print(f"Number of antibodies matched from database using antibody ID: {num_antibodies_matched}")
-
-            # # Impute any missing values in reference dataset
-            # print("Imputing missing values...")
-            # imputed_reference = _impute_dataset_by_type(reference_dataset, rho=rho) 
-
             max_retries = 5
             retries = 0
 
@@ -1910,6 +1891,7 @@ class ImmunoPhenoDB_Connect:
                      k_filter_anchor=k_filter_anchor,
                      k_score_anchor=k_score_anchor,
                      k_find_weights=k_find_weights,
+                     seed=map_seed,
                      # transfer_matrix
                      k_transfer_matrix=k_transfer_matrix,
                      c_transfer_matrix=c_transfer_matrix,
