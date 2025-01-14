@@ -31,6 +31,7 @@ class Controller:
                  k_filter_anchor=100,
                  k_score_anchor=80,
                  k_find_weights=100,
+                 seed=42,
                  # parallelization
                  num_chunks=1,
                  num_cores=1,
@@ -68,7 +69,8 @@ class Controller:
                                        k_score_anchor=k_score_anchor,
                                        k_find_weights=k_find_weights,
                                        num_chunks=num_chunks,
-                                       num_cores=num_cores)
+                                       num_cores=num_cores,
+                                       seed=seed)
 
         # create transfer matrix to transfer values from CITE-seq to CODEX
         self.mapping.transfer_matrix(k=k_transfer_matrix,
