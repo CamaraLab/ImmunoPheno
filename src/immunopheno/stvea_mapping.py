@@ -136,7 +136,7 @@ class Mapping:
         return anchors
 
     @staticmethod
-    def find_nn_rna(ref_emb, query_emb, rna_mat, cite_index=1, k=300, eps=0, nn_option=2):
+    def find_nn_rna(ref_emb, query_emb, rna_mat, cite_index=1, k=300, eps=0, nn_option=2, seed=42):
         """
         This function will find the nearest neighbors between reference-reference, query-query,
         reference-query, and query-reference.
@@ -150,7 +150,8 @@ class Mapping:
                 'cellsr': ref_emb.index.values, 'cellsq': query_emb.index.values}
                 nn_rr and nn_qq are also dictionary that contain "nn_idx" and "nn_dists"
         """
-        
+        np.random.seed(seed)
+
         nn_rr = dict()
         nn_qq = dict()
         start = time.time()
@@ -706,7 +707,8 @@ class Mapping:
                       k_filter_anchor, 
                       k_score_anchor,
                       k_find_weights, 
-                      nn_option):
+                      nn_option,
+                      seed):
                           
         # Before finding common proteins, drop any proteins that are all 0s
         codex_dropped = remove_all_zeros_or_na(self.stvea.codex_protein)
@@ -740,7 +742,8 @@ class Mapping:
                                         query_emb=cca_data.iloc[cite_count:, :],
                                         rna_mat=cite_latent,
                                         k=k_find_nn,
-                                        nn_option=nn_option)
+                                        nn_option=nn_option,
+                                        seed=seed)
 
         anchors = Mapping.find_anchor_pairs(neighbors, k_find_anchor)
 
@@ -779,7 +782,8 @@ class Mapping:
                           k_find_weights=100,
                           nn_option=2,
                           num_chunks=1,  # Defaulting to 1 chunk, 1 core
-                          num_cores=1):
+                          num_cores=1,
+                          seed=42): # Seed for finding anchors
         """
         This function will calibrate CODEX protein expression levels to CITE-seq protein expression levels.
         Wrap up all functions in this class.
@@ -826,7 +830,8 @@ class Mapping:
                                             query_emb=cca_data.iloc[cite_count:, :],
                                             rna_mat=cite_latent,
                                             k=k_find_nn,
-                                            nn_option=nn_option)
+                                            nn_option=nn_option,
+                                            seed=seed)
     
             anchors = Mapping.find_anchor_pairs(neighbors, k_find_anchor)
     
@@ -877,7 +882,8 @@ class Mapping:
                                                              k_filter_anchor, 
                                                              k_score_anchor, 
                                                              k_find_weights, 
-                                                             nn_option) for chunk in chunks])
+                                                             nn_option,
+                                                             seed) for chunk in chunks])
             
             end = time.time()
             print(f"map_codex_to_cite: {round(end - start, 3)}")
