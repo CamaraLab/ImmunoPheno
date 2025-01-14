@@ -21,6 +21,5 @@ python:
       path: .
     - requirements: docs/requirements.txt
     - requirements: requirements.txt
-      options: ["--no-cache-dir", "--global-option=build_ext", "RPY2_CFFI_MODE=ABI"]
 sphinx:
   configuration: docs/conf.py
