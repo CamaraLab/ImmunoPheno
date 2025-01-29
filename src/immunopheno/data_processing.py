@@ -2142,52 +2142,53 @@ class ImmunoPhenoData:
 
         # If dealing with single cell data with cell_labels,
         # Run linear regression to regress out z scores based on size and cell type
-        if self._gene_matrix is not None and self._cell_labels is not None:
-            df_by_type = _z_avg_umi_sum_by_type(background_z_scores,
-                                                self._gene_matrix,
-                                                self._cell_labels_filt_df)
+        # if self._gene_matrix is not None and self._cell_labels is not None:
+        #     df_by_type = _z_avg_umi_sum_by_type(background_z_scores,
+        #                                         self._gene_matrix,
+        #                                         self._cell_labels_filt_df)
 
-            lin_reg_type = _linear_reg_by_type(df_by_type)
-            self._linear_reg_df = lin_reg_type
+        #     lin_reg_type = _linear_reg_by_type(df_by_type)
+        #     self._linear_reg_df = lin_reg_type
 
-            # Normalize all protein values
-            normalized_df = _normalize_antibodies_df(
-                                    protein_cleaned_filt_df=protein_cleaned_filt,
-                                    fit_all_results=all_fits,
-                                    p_threshold=p_threshold,
-                                    background_cell_z_score=bg_cell_z_score,
-                                    classified_filt_df=classified_cells_filt,
-                                    cell_labels_filt_df=self._cell_labels_filt_df,
-                                    lin_reg_dict=lin_reg_type,
-                                    cumulative=cumulative)
+        #     # Normalize all protein values
+        #     normalized_df = _normalize_antibodies_df(
+        #                             protein_cleaned_filt_df=protein_cleaned_filt,
+        #                             fit_all_results=all_fits,
+        #                             p_threshold=p_threshold,
+        #                             background_cell_z_score=bg_cell_z_score,
+        #                             classified_filt_df=classified_cells_filt,
+        #                             cell_labels_filt_df=self._cell_labels_filt_df,
+        #                             lin_reg_dict=lin_reg_type,
+        #                             cumulative=cumulative)
 
-        # If dealing with single cell data WITHOUT cell labels:
-        # Run linear regression to regress out only size
-        elif self._gene_matrix is not None and self._cell_labels is None:
-            z_umi = _z_avg_umi_sum(background_z_scores, self._gene_matrix)
-            lin_reg = _linear_reg(z_umi)
-            self._linear_reg_df = lin_reg
+        # # If dealing with single cell data WITHOUT cell labels:
+        # # Run linear regression to regress out only size
+        # elif self._gene_matrix is not None and self._cell_labels is None:
+        #     z_umi = _z_avg_umi_sum(background_z_scores, self._gene_matrix)
+        #     lin_reg = _linear_reg(z_umi)
+        #     self._linear_reg_df = lin_reg
 
-            # Normalize all protein values
-            normalized_df = _normalize_antibodies_df(
-                                    protein_cleaned_filt_df=protein_cleaned_filt,
-                                    fit_all_results=all_fits,
-                                    p_threshold=p_threshold,
-                                    background_cell_z_score=bg_cell_z_score,
-                                    classified_filt_df=classified_cells_filt,
-                                    lin_reg=lin_reg,
-                                    cumulative=cumulative)
+        #     # Normalize all protein values
+        #     normalized_df = _normalize_antibodies_df(
+        #                             protein_cleaned_filt_df=protein_cleaned_filt,
+        #                             fit_all_results=all_fits,
+        #                             p_threshold=p_threshold,
+        #                             background_cell_z_score=bg_cell_z_score,
+        #                             classified_filt_df=classified_cells_filt,
+        #                             lin_reg=lin_reg,
+        #                             cumulative=cumulative)
 
-        # Else, normalize values for cytometry data
-        else:
-            # Normalize all values in the protein matrix
-            normalized_df = _normalize_antibodies_df(
-                                    protein_cleaned_filt_df=protein_cleaned_filt,
-                                    fit_all_results=all_fits,
-                                    p_threshold=p_threshold,
-                                    background_cell_z_score=bg_cell_z_score,
-                                    classified_filt_df=classified_cells_filt,
-                                    cumulative=cumulative)
+        # # Else, normalize values for cytometry data
+        # else:
+        
+        # Normalize all values in the protein matrix
+        normalized_df = _normalize_antibodies_df(
+                                protein_cleaned_filt_df=protein_cleaned_filt,
+                                fit_all_results=all_fits,
+                                p_threshold=p_threshold,
+                                background_cell_z_score=bg_cell_z_score,
+                                classified_filt_df=classified_cells_filt,
+                                cumulative=cumulative)
         
         self._normalized_counts_df = normalized_df
         
