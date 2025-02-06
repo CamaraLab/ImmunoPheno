@@ -1545,12 +1545,12 @@ class ImmunoPhenoData:
         if protein_matrix is None and scanpy is None:
             raise LoadMatrixError("protein_matrix file path or dataframe must be provided")
 
-        if (protein_matrix is not None and
-            cell_labels is not None and
-            gene_matrix is None and
-            scanpy is None):
-            raise LoadMatrixError("gene_matrix file path or dataframe must be present along with "
-                                  "cell_labels")
+        # if (protein_matrix is not None and
+        #     cell_labels is not None and
+        #     gene_matrix is None and
+        #     scanpy is None):
+        #     raise LoadMatrixError("gene_matrix file path or dataframe must be present along with "
+        #                           "cell_labels")
 
         # Single cell
         if self._protein_matrix is not None and self._gene_matrix is not None and scanpy is None:
