@@ -812,6 +812,12 @@ class Mapping:
             # After subsetting by common proteins, some rows can have all 0s. Filter again
             codex_subset_filtered = remove_all_zeros_or_na(codex_subset)
             cite_subset_filtered = remove_all_zeros_or_na(cite_subset)
+
+            # After dropping any columns, make sure both have the same proteins in common again
+            common_protein_filtered = [protein for protein in codex_subset_filtered if
+                              protein in cite_subset_filtered]
+            codex_subset_filtered = codex_subset_filtered[:, common_protein_filtered]
+            cite_subset_filtered = cite_subset_filtered[:, common_protein_filtered]
     
             # construct common CCA space.
             cca_data = Mapping.run_cca(cite_subset_filtered.T, codex_subset_filtered.T, True, num_cc=len(common_protein) - 1)
