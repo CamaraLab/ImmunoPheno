@@ -1434,8 +1434,9 @@ class ImmunoPhenoDB_Connect:
             "idBTO": idBTO,
             "idExperiment": idExperiment
         }
-                            
-        abs_response = requests.post(f"{self.url}/api/findabs", json=abs_body)
+
+        timeout = (1200, 1200) # connection, read timeout
+        abs_response = requests.post(f"{self.url}/api/findabs", json=abs_body, timeout=timeout)
 
         # Check response from server
         if 'text/html' in abs_response.headers.get('content-type'):
@@ -1821,7 +1822,7 @@ class ImmunoPhenoDB_Connect:
             }
 
             print("Retrieving reference dataset...")
-            timeout = (600, 600) # connection, read timeout
+            timeout = (1200, 1200) # connection, read timeout
             max_retries = 5
             retries = 0
 
@@ -2040,7 +2041,7 @@ class ImmunoPhenoDB_Connect:
         }
     
         print("Retrieving reference dataset...")
-        timeout = (600, 600)
+        timeout = (1200, 1200)
                    
         decision_tree_response = requests.post(f"{self.url}/api/decisiontreereference", json=decision_tree_body, timeout=timeout)
         if 'text/html' in decision_tree_response.headers.get('content-type'):
