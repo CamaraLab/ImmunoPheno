@@ -27,6 +27,8 @@ extensions = [
     'nbsphinx'
 ]
 
+autodoc_mock_imports = ["numpy", "pandas", "sklearn"]
+
 # Napoleon settings
 napoleon_google_docstring = True
 napoleon_numpy_docstring = True
