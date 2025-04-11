@@ -21,11 +21,11 @@ def _load_adt(protein: str | pd.DataFrame) -> pd.DataFrame:
     Loads the protein data from CSV or pandas DataFrame
 
     Parameters:
-      protein (str or pd.DataFrame): csv file path or dataframe where:
+        protein (str or pd.DataFrame): csv file path or dataframe where:
         rows = cells, cols = protein
 
     Returns:
-      protein_df_copy (Pandas DataFrame):
+        protein_df_copy (Pandas DataFrame):
     """
 
     if isinstance(protein, str):
