@@ -20,9 +20,6 @@ from scipy.stats import entropy
 from sklearn.impute import KNNImputer
 from sklearn.tree import export_graphviz, _tree
 from sklearn.preprocessing import LabelEncoder 
-from rpy2.robjects import pandas2ri, r
-from rpy2.robjects.packages import importr
-from rpy2.robjects import Formula
 
 import plotly.express as px
 import plotly.graph_objects as go
@@ -1101,6 +1098,10 @@ def _rpart_dt_model(x_train_df, y_train_array, **kwargs):
     Returns:
         rpart_model: R object containing a trained decision tree model
     """
+    from rpy2.robjects import pandas2ri, r
+    from rpy2.robjects.packages import importr
+    from rpy2.robjects import Formula
+
     # Activate pandas to R data frame conversion
     pandas2ri.activate()
 
