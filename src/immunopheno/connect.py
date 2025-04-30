@@ -424,7 +424,7 @@ def _filter_imputed(imputed_df_with_na, rho):
         # In this case, we want to filter out all columns with this max sum
         filtered_imputed = imputed_df_with_na.drop(columns=list(max_col_sum_cols.index))
         
-    elif max_row_sum == max_row_sum:
+    elif max_row_sum == max_col_sum:
         # Tiebreaker condition based on frequency of the max weight
         if len(max_row_sum_rows) > len(max_col_sum_cols):
             # If there were more frequent max sums in rows, then drop those
