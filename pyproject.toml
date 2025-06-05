@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ImmunoPheno"
+version = "0.1.0"
+description = "My package description"
+license = {text = "MIT"}
+authors = [
+	{name="Pablo Cámara", email='pcamara@pennmedicine.upenn.edu'},
+	]
+readme = "README.md"
+dynamic = ["dependencies"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.pytest.ini_options]
+pythonpath = [
+  "src"
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"immunopheno.data" = ["hpca_genes.txt", "cl_2024_05_15.owl"]
