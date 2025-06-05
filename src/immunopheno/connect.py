@@ -1740,7 +1740,7 @@ class ImmunoPhenoDB_Connect:
             parse_option (int): level of strictness when searching
                 antibodies in the database. Levels are as follows:
                     1: parse by clone ID and alias (default)
-                    2: parse by alias and antibody ID (most relaxed)
+                    2: parse by alias and antibody target (most relaxed)
                     3: parse by antibody ID (strictest)
             rho (float): weight parameter to adjust the number of
                 cells or antibodies in the reference dataset. A small value of rho
