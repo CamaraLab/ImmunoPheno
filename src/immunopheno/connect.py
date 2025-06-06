@@ -1137,6 +1137,9 @@ def _rpart_preds(rpart_model, x_test_df, label_encoder):
         final_df (pd.DataFrame): DataFrame containing cells as rows (index) and a column
         called "labels"
     """
+    from rpy2.robjects import pandas2ri, r
+    pandas2ri.activate()
+
     r_x_test_df = pandas2ri.py2rpy(x_test_df)
     
     # Make predictions on the test set
@@ -1168,6 +1171,9 @@ def _rpart_probs(rpart_model, x_test_df, label_encoder):
         each possible cell type. Each datapoint will contain the probability of that cell
         being labeled as one of each possible cell type
     """
+    from rpy2.robjects import pandas2ri, r
+    pandas2ri.activate()
+    
     r_x_test_df = pandas2ri.py2rpy(x_test_df)
     
     # make predictions on the test set
