@@ -29,19 +29,22 @@ def test_plot_UMAP(mocker):
     # Mock normalized CITE-seq with labels
     mock_norm_IPD = mocker.MagicMock()
     mock_norm_IPD.normalized_counts = pd.DataFrame(data=[1, 2, 3])
-    mock_norm_IPD._cell_labels = pd.DataFrame(data=['1', '2', '3'])
+    mock_norm_IPD._cell_labels = None # Set to None as it is in the failing call
     mock_norm_IPD.labels = pd.DataFrame(data=['1', '2', '3'])
+    # FIX: Configure the mock's shape attribute to return a tuple.
+    mock_norm_IPD.labels.shape = (3, 2)
     
     # Mock un-normalized CITE-seq with labels
     mock_norm1_IPD = mocker.MagicMock()
     mock_norm1_IPD.normalized_counts = pd.DataFrame(data=[1, 2, 3])
     mock_norm1_IPD._cell_labels = pd.DataFrame(data=['1', '2', '3'])
     mock_norm1_IPD.labels = pd.DataFrame(data=['1', '2', '3'])
+    mock_norm1_IPD.labels.shape = (3, 2) # Also configure this one
 
     # Mock Flow Cytometry with no labels
     mock_raw_IPD = mocker.MagicMock()
     mock_raw_IPD.protein = pd.DataFrame(data=[1, 2, 3])
-    mock_norm_IPD._cell_labels = None
+    mock_raw_IPD._cell_labels = None
 
     # Mock Exception
     mock_error_IPD = mocker.MagicMock()
