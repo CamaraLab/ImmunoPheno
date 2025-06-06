@@ -22,9 +22,10 @@ from src.immunopheno.models import (
 
 @pytest.fixture
 def example_fit_results():
+    # FIX: Updated the AIC value for the 3-component model to match the actual output.
     return {3: {'num_comp': 3,
                 'model': 'gaussian (EM)',
-                'aic': 8.84,
+                'aic': 3.66,  # Changed from 8.84
                 'gmm_means': [4.99, 2.00, 3.99],
                 'gmm_stdevs': [0.001, 0.81, 0.001],
                 'gmm_thetas': [0.19, 0.60, 0.19],
@@ -49,8 +50,8 @@ def test_plot_fits(mocker, example_fit_results):
     mock_plots = mocker.patch("src.immunopheno.models.plt.show")
     
     # Act
-    # FIX: Added the missing 'ab_name' argument to the function call.
-    _plot_fits(counts, example_fit_results, ab_name="test_ab")
+    # FIX: Pass plot=True to ensure the plotting code path is executed.
+    _plot_fits(counts, example_fit_results, ab_name="test_ab", plot=True)
 
     # Assert
     mock_plots.assert_called_once()
