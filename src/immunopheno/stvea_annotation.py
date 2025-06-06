@@ -162,26 +162,27 @@ class Annotation:
         cluster_names = {}
         if option == 1:
         # define layout
-            layout = [[sg.Text('Enter the name for each' + title + 'cluster.')],
-                      *[[sg.Text(cluster_name), sg.Input(key=str(i))]
-                        for i, cluster_name in enumerate(cluster_index)],
-                      [sg.Button('OK')]]
+            # layout = [[sg.Text('Enter the name for each' + title + 'cluster.')],
+            #           *[[sg.Text(cluster_name), sg.Input(key=str(i))]
+            #             for i, cluster_name in enumerate(cluster_index)],
+            #           [sg.Button('OK')]]
 
-            # create window
-            window = sg.Window('Enter' + title + 'Cluster Names', layout)
+            # # create window
+            # window = sg.Window('Enter' + title + 'Cluster Names', layout)
 
-            # event loop and collecting user input
-            while True:
-                event, values = window.read()
-                if event == 'OK':
-                    for i, cluster_index in enumerate(cluster_index):
-                        cluster_names[cluster_index] = values[str(i)].strip()
-                    break
-                elif event == sg.WINDOW_CLOSED:
-                    break
+            # # event loop and collecting user input
+            # while True:
+            #     event, values = window.read()
+            #     if event == 'OK':
+            #         for i, cluster_index in enumerate(cluster_index):
+            #             cluster_names[cluster_index] = values[str(i)].strip()
+            #         break
+            #     elif event == sg.WINDOW_CLOSED:
+            #         break
 
-            # clean up
-            window.close()
+            # # clean up
+            # window.close()
+            pass
         else:
             while True:
                 user_input = input(f"Complete editing {title} cluster names? y/n\n")
