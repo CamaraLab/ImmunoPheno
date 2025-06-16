@@ -1,5 +1,5 @@
 # ImmunoPheno
-[![tests](https://github.com/CamaraLab/ImmunoPheno/actions/workflows/python-package.yml/badge.svg?branch=package-dev)](https://github.com/CamaraLab/ImmunoPheno/actions/workflows/python-package.yml)
+[![tests](https://github.com/CamaraLab/ImmunoPheno/actions/workflows/python-package.yml/badge.svg?branch=main)](https://github.com/CamaraLab/ImmunoPheno/actions/workflows/python-package.yml)
 [![codecov](https://codecov.io/gh/CamaraLab/ImmunoPheno/branch/package-dev/graph/badge.svg?token=R7GBNL9ST6)](https://codecov.io/gh/CamaraLab/ImmunoPheno)
 
 ImmunoPheno is a Python library for the design, annotation, and analysis of multiplexed cytometry data based on 
@@ -37,3 +37,6 @@ the Docker image. Here one must mount the folder on the host machine as /home/jo
 /home/jovyan/some_other_folder as the primary user "jovyan" in the Docker image only has access to that directory. 
 See the [Jupyter docker image documentation](https://jupyter-docker-stacks.readthedocs.io/en/latest/using/selecting.html) 
 for more information.
+
+## Documentation
+Documentation and tutorials can be found on [ImmunoPheno's readthedocs.io website](https://immunopheno.readthedocs.io/en/latest/index.html).
