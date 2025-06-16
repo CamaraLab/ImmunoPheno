@@ -75,7 +75,8 @@ class Controller:
         # create transfer matrix to transfer values from CITE-seq to CODEX
         self.mapping.transfer_matrix(k=k_transfer_matrix,
                                      c=c_transfer_matrix,
-                                     mask_threshold=mask_threshold)
+                                     mask_threshold=mask_threshold,
+                                     seed=seed)
 
         self.annotation.transfer_labels(user_input=False)
 

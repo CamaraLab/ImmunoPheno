@@ -35,7 +35,7 @@ class Mapping:
         self.stvea = stvea
 
     @staticmethod
-    def run_cca(object1, object2, standardize=True, num_cc=30, option=1, random_state=0):
+    def run_cca(object1, object2, standardize=True, num_cc=30, option=1, random_state=0, seed=42):
         """
         This function will use CCA to reduce dimensions.
 
@@ -47,6 +47,8 @@ class Mapping:
         @param option: an integer value to specify the way to perform SVD. 1 for irlb method. 2 for Scikit-learn svds.
         @return: a dataframe that combines the two reduced dataframes.
         """
+        np.random.seed(seed)
+
         start = time.time()
         cells1 = object1.columns
         cells2 = object2.columns
@@ -80,7 +82,7 @@ class Mapping:
         return cca_data
 
     @staticmethod
-    def find_anchor_pairs(neighbors, k_anchor=5):
+    def find_anchor_pairs(neighbors, k_anchor=5, seed=42):
         """
         This function will find anchors between the reference and query dataset.
         The score column is initialized here but will be calculated at the next step.
@@ -89,6 +91,8 @@ class Mapping:
             Fewer k_anchor should mean higher quality of anchors.
         @return: A dataframe that has three columns: cell r, cell q, and score.
         """
+        np.random.seed(seed)
+
         start = time.time()
 
         # some routine check
@@ -158,7 +162,7 @@ class Mapping:
         if cite_index == 1:
             if nn_option == 1:
                 # use Pearson Correlation distance to find NN in mRNA dataset.
-                nn_rr = Mapping.cor_nn(data=rna_mat, k=k + 1)
+                nn_rr = Mapping.cor_nn(data=rna_mat, k=k + 1, seed=seed)
             else:
                 nn = NearestNeighbors(n_neighbors=k + 1, algorithm='brute', metric="correlation")
                 nn.fit(rna_mat)
@@ -179,7 +183,7 @@ class Mapping:
                      "nn_dists": pd.DataFrame(nn_rr_result[0])}
             # use Pearson Correlation distance to find NN in mRNA dataset.
             if nn_option == 1:
-                nn_qq = Mapping.cor_nn(data=rna_mat, k=k + 1)
+                nn_qq = Mapping.cor_nn(data=rna_mat, k=k + 1, seed=seed)
             else:
                 nn = NearestNeighbors(n_neighbors=k + 1, algorithm='brute', metric="correlation")
                 nn.fit(rna_mat)
@@ -241,7 +245,7 @@ class Mapping:
         return 1 - np.multiply(numerator, denominator)
 
     @staticmethod
-    def cor_nn(data, query=None, k=5, option=1, npartition=3):
+    def cor_nn(data, query=None, k=5, option=1, npartition=3, seed=42):
         """
         This function can find the nearest neighbors (rows) in "data" dataset for each record (row) in "query" dataset.
         @param data: a pandas dataframe.
@@ -251,6 +255,8 @@ class Mapping:
         @param k: the number of nearest neighbors.
         @return: {'nn_idx': neighbors, 'nn_dists': distances}
         """
+        np.random.seed(seed)
+
         global cor_dist_df
 
         if query is None:
@@ -395,7 +401,7 @@ class Mapping:
         return {'nn_idx': neighbors.astype("uint32"), 'nn_dists': distances}
 
     @staticmethod
-    def filter_anchors(ref_mat, query_mat, anchors, k_filter=200, nn_option=2):
+    def filter_anchors(ref_mat, query_mat, anchors, k_filter=200, nn_option=2, seed=42):
         """
         This function will keep anchors that preserve original data info.
         This means that the anchor in CCA space should also be anchors in the original dataset.
@@ -405,12 +411,14 @@ class Mapping:
         @param k_filter: the number of neighbors to find in the original data space.
         @return: a dataframe of filtered anchors.
         """
+        np.random.seed(seed)
+
         start = time.time()
         nn1_idx = pd.DataFrame()
         nn2_idx = pd.DataFrame()
         if nn_option == 1:
-            nn1 = Mapping.cor_nn(data=query_mat, query=ref_mat, k=k_filter)
-            nn2 = Mapping.cor_nn(data=ref_mat, query=query_mat, k=k_filter)
+            nn1 = Mapping.cor_nn(data=query_mat, query=ref_mat, k=k_filter, seed=seed)
+            nn2 = Mapping.cor_nn(data=ref_mat, query=query_mat, k=k_filter, seed=seed)
             nn1_idx = nn1['nn_idx']
             nn2_idx = nn2['nn_idx']
         else:
@@ -458,7 +466,7 @@ class Mapping:
         return nn_mat
 
     @staticmethod
-    def score_anchors(neighbors, anchors, num_cells_ref, num_cells_query, k_score=30):
+    def score_anchors(neighbors, anchors, num_cells_ref, num_cells_query, k_score=30, seed=42):
         """
 
         This function will calculate a score based on number of shared neighbors for each anchor.
@@ -487,6 +495,8 @@ class Mapping:
         @return: a dataframe of anchors with scores.
 
         """
+        np.random.seed(seed)
+
         start = time.time()
         # Convert anchor data frame
         anchor_df = pd.DataFrame(anchors)
@@ -547,7 +557,7 @@ class Mapping:
         return anchor_new
 
     @staticmethod
-    def find_integration_matrix(ref_mat, query_mat, neighbors, anchors):
+    def find_integration_matrix(ref_mat, query_mat, neighbors, anchors, seed=42):
         """
         Calculate anchor vectors between reference and query dataset.
 
@@ -560,6 +570,8 @@ class Mapping:
         Returns:
         pd.DataFrame: integration matrix
         """
+        np.random.seed(seed)
+
         start = time.time()
         # Extract cell expression proteins
         data_use_r = ref_mat.iloc[anchors["cellr"]].reset_index(drop=True)
@@ -577,7 +589,7 @@ class Mapping:
         return integration_matrix
 
     @staticmethod
-    def find_weights(neighbors, anchors, query_mat, k_weight=300, sd_weight=1, nn_option=2, delta=0.00001):
+    def find_weights(neighbors, anchors, query_mat, k_weight=300, sd_weight=1, nn_option=2, delta=0.00001, seed=42):
         """
         This function will find weights for anchors.
         This weight is based on the distance of query cell and anchor distance.
@@ -589,6 +601,8 @@ class Mapping:
         @param delta: in some extreme cases, the last k_weight's entry will be zero. Add delta to avoid zero division.
         @return: a dataframe whose row represents query cell and column represents anchors.
         """
+        np.random.seed(seed)
+
         start = time.time()
 
         # initialize some variables
@@ -601,7 +615,7 @@ class Mapping:
         nn_idx = pd.DataFrame();
         if nn_option == 1:
             # find the nearest anchors to each query cell
-            kna_query = Mapping.cor_nn(data=data, query=query_mat, k=k_weight)
+            kna_query = Mapping.cor_nn(data=data, query=query_mat, k=k_weight, seed=seed)
             nn_dists = kna_query["nn_dists"]
             nn_dists.index = cellsq
             nn_idx = kna_query["nn_idx"]
@@ -655,7 +669,7 @@ class Mapping:
         return weights
 
     @staticmethod
-    def transform_data_matrix(query_mat, integration_matrix, weights, stvea):
+    def transform_data_matrix(query_mat, integration_matrix, weights, stvea, seed=42):
         """
         This function will generate the corrected protein expression matrix.
         @param stvea: a STvEA object.
@@ -664,6 +678,8 @@ class Mapping:
         @param weights: weights of the anchors of each query cell.
         @return: a corrected query cell protein expression matrix.
         """
+        np.random.seed(seed)
+
         start = time.time()
         integration_matrix.index = weights.columns
         bv = weights.dot(integration_matrix)
@@ -681,7 +697,7 @@ class Mapping:
         return
     
     @staticmethod
-    def transform_data_matrix_parallel(query_mat, integration_matrix, weights, stvea):
+    def transform_data_matrix_parallel(query_mat, integration_matrix, weights, stvea, seed=42):
         """
         This function will generate the corrected protein expression matrix.
         @param stvea: a STvEA object.
@@ -690,6 +706,8 @@ class Mapping:
         @param weights: weights of the anchors of each query cell.
         @return: a corrected query cell protein expression matrix.
         """
+        np.random.seed(seed)
+
         start = time.time()
         integration_matrix.index = weights.columns
         bv = weights.dot(integration_matrix)
@@ -709,6 +727,7 @@ class Mapping:
                       k_find_weights, 
                       nn_option,
                       seed):
+        np.random.seed(seed)
                           
         # Before finding common proteins, drop any proteins that are all 0s
         codex_dropped = remove_all_zeros_or_na(self.stvea.codex_protein)
@@ -734,7 +753,11 @@ class Mapping:
         print("Processing chunk of size: ", len(chunk_idx))
         
         # construct common CCA space for the chunk
-        cca_data = Mapping.run_cca(cite_subset_filtered.T, chunk.T, True, num_cc=len(common_protein) - 1)
+        cca_data = Mapping.run_cca(cite_subset_filtered.T, 
+                                   chunk.T, 
+                                   True, 
+                                   num_cc=len(common_protein) - 1, 
+                                   seed=seed)
 
         cite_count = cite_subset_filtered.shape[0]
 
@@ -745,18 +768,18 @@ class Mapping:
                                         nn_option=nn_option,
                                         seed=seed)
 
-        anchors = Mapping.find_anchor_pairs(neighbors, k_find_anchor)
+        anchors = Mapping.find_anchor_pairs(neighbors, k_find_anchor, seed=seed)
 
-        anchors = Mapping.filter_anchors(cite_subset_filtered, chunk, anchors, k_filter_anchor, nn_option=nn_option)
+        anchors = Mapping.filter_anchors(cite_subset_filtered, chunk, anchors, k_filter_anchor, nn_option=nn_option, seed=seed)
 
         anchors = Mapping.score_anchors(neighbors, anchors, len(neighbors["nn_rr"]["nn_idx"]),
-                                        len(neighbors["nn_qq"]["nn_idx"]), k_score_anchor)
+                                        len(neighbors["nn_qq"]["nn_idx"]), k_score_anchor, seed=seed)
 
-        integration_matrix = Mapping.find_integration_matrix(cite_subset_filtered, chunk, neighbors, anchors)
+        integration_matrix = Mapping.find_integration_matrix(cite_subset_filtered, chunk, neighbors, anchors, seed=seed)
 
-        weights = Mapping.find_weights(neighbors, anchors, chunk, k_find_weights, nn_option=nn_option)
+        weights = Mapping.find_weights(neighbors, anchors, chunk, k_find_weights, nn_option=nn_option, seed=seed)
 
-        return Mapping.transform_data_matrix_parallel(chunk, integration_matrix, weights, self.stvea)
+        return Mapping.transform_data_matrix_parallel(chunk, integration_matrix, weights, self.stvea, seed=seed)
 
     @staticmethod
     def dynamic_chunking(index, num_chunks):
@@ -788,6 +811,8 @@ class Mapping:
         This function will calibrate CODEX protein expression levels to CITE-seq protein expression levels.
         Wrap up all functions in this class.
         """
+        np.random.seed(seed)
+
         start = time.time()
 
         if num_chunks == 1:
@@ -814,7 +839,11 @@ class Mapping:
             cite_subset_filtered = remove_all_zeros_or_na(cite_subset)
     
             # construct common CCA space.
-            cca_data = Mapping.run_cca(cite_subset_filtered.T, codex_subset_filtered.T, True, num_cc=len(common_protein) - 1)
+            cca_data = Mapping.run_cca(cite_subset_filtered.T, 
+                                       codex_subset_filtered.T, 
+                                       True, 
+                                       num_cc=len(common_protein) - 1, 
+                                       seed=seed)
     
             cite_count = cite_subset_filtered.shape[0]
             # find the nearest neighbors
@@ -833,18 +862,18 @@ class Mapping:
                                             nn_option=nn_option,
                                             seed=seed)
     
-            anchors = Mapping.find_anchor_pairs(neighbors, k_find_anchor)
+            anchors = Mapping.find_anchor_pairs(neighbors, k_find_anchor, seed=seed)
     
-            anchors = Mapping.filter_anchors(cite_subset_filtered, codex_subset_filtered, anchors, k_filter_anchor, nn_option=nn_option)
+            anchors = Mapping.filter_anchors(cite_subset_filtered, codex_subset_filtered, anchors, k_filter_anchor, nn_option=nn_option, seed=seed)
     
             anchors = Mapping.score_anchors(neighbors, anchors, len(neighbors["nn_rr"]["nn_idx"]),
-                                            len(neighbors["nn_qq"]["nn_idx"]), k_score_anchor)
+                                            len(neighbors["nn_qq"]["nn_idx"]), k_score_anchor, seed=seed)
     
-            integration_matrix = Mapping.find_integration_matrix(cite_subset_filtered, codex_subset_filtered, neighbors, anchors)
+            integration_matrix = Mapping.find_integration_matrix(cite_subset_filtered, codex_subset_filtered, neighbors, anchors, seed=seed)
     
-            weights = Mapping.find_weights(neighbors, anchors, codex_subset_filtered, k_find_weights, nn_option=nn_option)
+            weights = Mapping.find_weights(neighbors, anchors, codex_subset_filtered, k_find_weights, nn_option=nn_option, seed=seed)
     
-            Mapping.transform_data_matrix(codex_subset_filtered, integration_matrix, weights, self.stvea)
+            Mapping.transform_data_matrix(codex_subset_filtered, integration_matrix, weights, self.stvea, seed=seed)
     
             end = time.time()
             print(f"map_codex_to_cite: {round(end - start, 3)}")
@@ -902,12 +931,15 @@ class Mapping:
                         c=0.1,
                         mask_threshold=0.5,
                         mask=True,
-                        nn_option=2):
+                        nn_option=2,
+                        seed=42):
         """
         This function builds a transfer matrix.
         @param k: number of the nearest neighbors to find.
         @param c: constant controls the width of the Gaussian kernel.
         """
+        np.random.seed(seed)
+
         start = time.time()
         from_dataset = self.stvea.cite_protein
         to_dataset = self.stvea.codex_protein_corrected
@@ -928,7 +960,7 @@ class Mapping:
         # create weighted nn matrix as sparse matrix
         # return nn matrix
         if nn_option == 1:
-            nn_list = Mapping.cor_nn(from_dataset, to_dataset, k=k)
+            nn_list = Mapping.cor_nn(from_dataset, to_dataset, k=k, seed=seed)
             nn_idx = nn_list['nn_idx']
             nn_dists = nn_list['nn_dists']
         else:
