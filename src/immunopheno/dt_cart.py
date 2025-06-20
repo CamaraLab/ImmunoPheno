@@ -503,7 +503,8 @@ class CART(Algo):
                      fontweight='bold',
                      transform=fig.transFigure)
 
-        plt.show()
+        # plt.show()
+        return fig
 
     def interactive_gating_plot(self,
                                 y_length,
@@ -1187,7 +1188,7 @@ class CART(Algo):
 
         # invoke helper function to generate the plot
         if plot_option == 1:
-            self.static_gating_plot(y_length, x_length, tree, plot_tree, noise)
+            return self.static_gating_plot(y_length, x_length, tree, plot_tree, noise)
         elif plot_option == 2:
             self.interactive_gating_plot(y_length, x_length, tree, plot_tree, noise)
         elif plot_option == 3:

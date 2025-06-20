@@ -2952,7 +2952,8 @@ class ImmunoPhenoDB_Connect:
             image.save('decision_tree.png')
 
         if plot_gates:
-            cart.generate_gating_plot(noise=False, plot_option=plot_gates_option)
+            plot_to_return = cart.generate_gating_plot(noise=False, plot_option=plot_gates_option)
+            return optimal_ab, path_yield_purity, plot_to_return
             
         return optimal_ab, path_yield_purity
     
