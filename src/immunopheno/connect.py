@@ -2673,7 +2673,7 @@ class ImmunoPhenoDB_Connect:
                 "target_idcl": unique_target_family_idCLs,
                 "target_idbto": final_target_idBTOs,
                 "background_idcl": modified_background_family_idCLs,
-                "background_idbto": final_background_idBTOs,
+                "background_idbto": [], # hardcode, will no longer accept background BTOs
                 "experiment": experiment,
                 "seed": seed
             }
@@ -2779,10 +2779,10 @@ class ImmunoPhenoDB_Connect:
         Args:
             target (list): list of cell populations and/or tissues to query as the target
                 for antibodies in the panel. This must use cell ontology IDs and BRENDA tissue ontology IDs. 
-                Example: ["CL:0000084", "CL:0000236"]
-            background (list, optional): list of cell populations and/or tissues used as comparison. These
-                will be used to differentiate the target from these background populations/tissues.
-                Example: ["BTO:0001025"]
+                Example: ["CL:0000818", "CL:0000236"]
+            background (list, optional): list of cell populations used as comparison. These
+                will be used to differentiate the target from these background populations
+                Example: ["CL:0000084"]
             tissue (list, optional): list of BRENDA tissue ontologies to restrict the entire query.
             experiment (list, optional): list of experiment IDs from the database to restrict the entire query. 
             panel_size (int): desired number of antibodies in the panel. Defaults to 10.
