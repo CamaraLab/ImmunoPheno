@@ -2762,7 +2762,7 @@ class ImmunoPhenoDB_Connect:
                                plot_decision_tree: bool = False,
                                plot_gates: bool = False,
                                plot_gates_option: int = 1,
-                               rho: float = 0.5,
+                               rho: float = 0.35,
                                shift: int = 8,
                                seed: int = 42,
                                merge_option: int = 1) -> pd.DataFrame:
