@@ -37,8 +37,7 @@ from .dt_cart import CART
 
 def _update_cl_owl():
     warnings.filterwarnings("ignore")
-    response = requests.get('https://www.ebi.ac.uk/ols4/api/ontologies/cl')
-    owl_link = response.json()['config']['versionIri']
+    owl_link = "https://purl.obolibrary.org/obo/cl.owl"
     return owl_link
 
 def _graph_pos(G):
