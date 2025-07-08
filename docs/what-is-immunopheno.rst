@@ -35,6 +35,6 @@ By addressing challenges in both experimental design and data analysis, ImmunoPh
 enables more rigorous and reproducible immunophenotyping, improve the phenotypic resolution, accuracy, and 
 reproducibility of cytometry experiments.
 
-The installation instructions and source code of ImmunoPheno can be found in the `Github site<https://github.com/CamaraLab/ImmunoPheno>`_.
+The installation instructions and source code of ImmunoPheno can be found in the `Github site <https://github.com/CamaraLab/ImmunoPheno>`_.
 
-A web app demonstrating some of ImmunoPheno's functinalities is available at `http://immunopheno.org/<http://immunopheno.org/>`_.
+A web app demonstrating some of ImmunoPheno's functinalities is available at `http://immunopheno.org/ <http://immunopheno.org>`_.
