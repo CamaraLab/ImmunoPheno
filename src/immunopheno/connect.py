@@ -24,6 +24,7 @@ from sklearn.preprocessing import LabelEncoder
 import plotly.express as px
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 from netgraph import Graph
 
 import networkx as nx
@@ -1214,6 +1215,66 @@ def _reverse_fam_dict(fam_dict):
             reversed_dict[child] = key
     return reversed_dict
 
+# Quadtree used for Partitioning Spatial Images
+class Quadtree:
+    def __init__(self, boundary, max_points=100000):
+        self.boundary = boundary
+        self.max_points = max_points
+        self.points = []
+        self.divided = False
+        self.children = []
+
+    def subdivide(self):
+        x, y, w, h = self.boundary
+        half_w, half_h = w / 2, h / 2
+
+        # Define the four quadrants
+        nw = (x, y + half_h, half_w, half_h)
+        ne = (x + half_w, y + half_h, half_w, half_h)
+        sw = (x, y, half_w, half_h)
+        se = (x + half_w, y, half_w, half_h)
+
+        self.children.append(Quadtree(nw, self.max_points))
+        self.children.append(Quadtree(ne, self.max_points))
+        self.children.append(Quadtree(sw, self.max_points))
+        self.children.append(Quadtree(se, self.max_points))
+        
+        self.divided = True
+        
+        for point in self.points:
+            for child in self.children:
+                child.insert(point)
+        
+        self.points = []
+
+    def insert(self, point):
+        x, y, w, h = self.boundary
+        if not (x <= point[0] < x + w and y <= point[1] < y + h):
+            return False
+            
+        if len(self.points) < self.max_points and not self.divided:
+            self.points.append(point)
+            return True
+        
+        if not self.divided:
+            self.subdivide()
+
+        for child in self.children:
+            if child.insert(point):
+                return True
+
+    def get_leaf_data(self):
+        if not self.divided:
+            if self.points:
+                return [{'boundary': self.boundary, 'count': len(self.points)}]
+            else:
+                return []
+        else:
+            leaf_data = []
+            for child in self.children:
+                leaf_data.extend(child.get_leaf_data())
+            return leaf_data
+
 class ImmunoPhenoDB_Connect:
     """A class to interact with the ImmunoPheno database
 
@@ -1692,6 +1753,127 @@ class ImmunoPhenoDB_Connect:
             res_JSON = we_response.json()
             res_df = pd.DataFrame.from_dict(res_JSON)
             return res_df
+        
+    def setup_quadtree(self,
+                       spatial: pd.DataFrame, 
+                       max_points: int = 100000, 
+                       x_coord_col: str = "x_coord", 
+                       y_coord_col: str = "y_coord"):
+        """Peforms quadtree image decomposition on spatial immunohistochemistry data.
+
+        Recursively divides spatial data into four equal quadrants until the number of
+        points in max_points is reached. Used in conjunction with run_stvea when annotating
+        IHC data in chunks. 
+
+        Args:
+            spatial (pd.DataFrame): spatial data containing x and y coordinates
+            max_points (int): maximum number of points in each quadtree quadrant
+            x_coord_col (str): name of column in spatial containing x coordinates
+            y_coord_col (str): name of column in spatial containing y coordinates
+
+        Returns:
+            boundary_table (pd.DataFrame): dataframe containing each box_id (quadrant) and
+                their respective x & y coordinates
+        """
+
+        points = spatial[[x_coord_col, y_coord_col]].values
+
+        # Setup Quadtree
+        x_min, y_min = np.min(points, axis=0)
+        x_max, y_max = np.max(points, axis=0)
+        width = x_max - x_min
+        height = y_max - y_min
+        
+        # Add a small epsilon to the width and height
+        width += 1e-9
+        height += 1e-9
+        
+        root_boundary = (x_min, y_min, width, height)
+        qtree = Quadtree(root_boundary, max_points=max_points)
+        
+        for point in points:
+            qtree.insert(point)
+        
+        partition_data = qtree.get_leaf_data()
+        
+        df_partitions = pd.DataFrame(partition_data)
+        df_partitions['Box ID'] = [f'{i}' for i in range(len(df_partitions))]
+        df_partitions['Box ID'] = df_partitions['Box ID'].astype(int)
+        df_partitions[['x', 'y', 'width', 'height']] = pd.DataFrame(df_partitions['boundary'].tolist(), index=df_partitions.index)
+        
+        df_summary = df_partitions[['Box ID', 'count', 'x', 'y', 'width', 'height']]
+        
+        # Calculate the four boundary values
+        df_summary['x_max'] = df_summary['x'] + df_summary['width']
+        df_summary['y_max'] = df_summary['y'] + df_summary['height']
+        df_summary = df_summary.rename(columns={'x': 'x_min', 'y': 'y_min'}, inplace=False)
+        
+        boundary_table = df_summary[['Box ID', 'count', 'x_min', 'x_max', 'y_min', 'y_max']]
+        
+        # Display the result
+        return boundary_table
+
+    def plot_quadtree(self,
+                      spatial: pd.DataFrame, 
+                      boundary_table: pd.DataFrame,
+                      x_coord_col: str = "x_coord",
+                      y_coord_col: str = "y_coord"):
+        """Plot quadrants on spatial data as defined by the quadtree
+
+        Args:
+            spatial (pd.DataFrame): spatial data containing x and y coordinates
+            boundary_table (pd.DataFrame): dataframe containing quadrant boundaries from setup_quadtree
+            x_coord_col (str): name of column in spatial containing x coordinates
+            y_coord_col (str): name of column in spatial containing y coordinates
+
+        Returns:
+            fig: Plotly figure containing spatial points outlined by quadrants
+        """
+                        
+        points = spatial[[x_coord_col, y_coord_col]].values
+        
+        fig, ax = plt.subplots(figsize=(12, 12))
+        ax.scatter(points[:, 0], points[:, 1], s=0.1, color='blue', alpha=0.5)
+        
+        for index, row in boundary_table.iterrows():
+            x, y, w, h = row['x_min'], row['y_min'], row['x_max']-row['x_min'], row['y_max']-row['y_min']
+            rect = patches.Rectangle((x, y), w, h, linewidth=1.5, edgecolor='r', facecolor='none')
+            ax.add_patch(rect)
+            # Add the Box ID text to the center of the rectangle
+            ax.text(x + w/2, y + h/2, row['Box ID'], color='black',
+                    fontsize=7, ha='center', va='center', weight='bold',
+                    bbox=dict(facecolor='white', alpha=0.6, edgecolor='none', boxstyle='round,pad=0.2'))
+        
+        ax.set_title("Tonsil Tissue with Numbered Quadtree Partitions")
+        ax.set_xlabel(f"{x_coord_col}")
+        ax.set_ylabel(f"{y_coord_col}")
+        ax.set_aspect('equal', adjustable='box')
+        
+        return fig
+
+    def get_quadrant_points(self,
+                            spatial: pd.DataFrame, 
+                            boundary_table: pd.DataFrame, 
+                            box_id: int):
+        """Retrieve all points and their coordinates within a quadrant
+
+        Args:
+            spatial (pd.DataFrame): spatial data containing x and y coordinates
+            boundary_table (pd.DataFrame): dataframe containing quadrant boundaries from setup_quadtree
+            box_id (int): number of the box or quadrant of interest
+
+        Returns:
+            spat_box (pd.DataFrame): dataframe containing points from only that quadrant
+        """
+        row_values = boundary_table.loc[boundary_table["Box ID"] == box_id]
+        x_min = float(row_values["x_min"].iloc[0])
+        x_max = float(row_values["x_max"].iloc[0])
+        y_min = float(row_values["y_min"].iloc[0])
+        y_max = float(row_values["y_max"].iloc[0])
+
+        spat_box = spatial.loc[(spatial['x_coord'] >= x_min) & (spatial['x_coord'] < x_max) & (spatial['y_coord'] >= y_min) & (spatial['y_coord'] < y_max)]
+        
+        return spat_box
 
     def run_stvea(self,
                   IPD: ImmunoPhenoData,
