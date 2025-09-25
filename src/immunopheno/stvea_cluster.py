@@ -11,7 +11,6 @@ import hdbscan
 from sklearn.metrics import silhouette_samples
 from scipy.spatial.distance import pdist, squareform
 from scipy.cluster.hierarchy import linkage, fcluster
-from igraph import Graph
 from numba import NumbaDeprecationWarning
 import seaborn as sns
 import math
@@ -52,6 +51,7 @@ class Cluster:
         1: use Pearson distance to find the nearest neighbors on CODEX protein data.
         2: use Euclidean distance to find the nearest neighbors on 2D CODEX embedding data.
         """
+        from igraph import Graph
         start = time.time()
         random.seed(0)
 
