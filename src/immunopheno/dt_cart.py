@@ -15,11 +15,6 @@ import plotly.offline as pyo
 import plotly.graph_objects as go
 import plotly.express as px
 import plotly.figure_factory as ff
-import dash
-from dash import html
-from dash import dcc
-import dash_bootstrap_components as dbc
-from dash.dependencies import Input, Output
 import logging
 
 
@@ -753,6 +748,11 @@ class CART(Algo):
                                     tree,
                                     plot_tree,
                                     noise=False):
+        import dash
+        from dash import html
+        from dash import dcc
+        import dash_bootstrap_components as dbc
+        from dash.dependencies import Input, Output
 
         # initialize a 2D array to store plotly figures
         plotly_figs = [[None for _ in range(x_length)] for _ in range(y_length)]
