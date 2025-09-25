@@ -14,9 +14,10 @@ import pandas as pd
 from importlib.resources import files
 from tqdm.autonotebook import tqdm
 from sklearn.linear_model import LinearRegression
+from typing import Union
 from .models import _gmm_results, _nb_mle_results
 
-def _load_adt(protein: str | pd.DataFrame) -> pd.DataFrame:
+def _load_adt(protein: Union[str, pd.DataFrame]) -> pd.DataFrame:
     """
     Loads the protein data from CSV or pandas DataFrame
 
@@ -228,7 +229,7 @@ def _load_rna_parallel(gene_filepath: str) -> pd.DataFrame:
 
     return results_df
 
-def _load_rna(gene: str | pd.DataFrame) -> pd.DataFrame:
+def _load_rna(gene: Union[str, pd.DataFrame]) -> pd.DataFrame:
     """
     Loads in RNA data from a CSV or pandas DataFrame
 
@@ -351,7 +352,7 @@ def _filter_antibodies(protein_matrix: pd.DataFrame,
 
     return filt_df.T
 
-def _load_labels(labels: str | pd.DataFrame) -> pd.DataFrame:
+def _load_labels(labels: Union[str, pd.DataFrame]) -> pd.DataFrame:
     """
     Shifts the first column (cell names) to become the index.
     Remaining columns will contain the labels and celltypes.
@@ -1464,9 +1465,9 @@ class ImmunoPhenoData:
     """
 
     def __init__(self,
-                 protein_matrix: str | pd.DataFrame = None,
-                 gene_matrix: str | pd.DataFrame = None,
-                 cell_labels: str | pd.DataFrame = None,
+                 protein_matrix: Union[str,  pd.DataFrame] = None,
+                 gene_matrix: Union[str, pd.DataFrame] = None,
+                 cell_labels: Union[str, pd.DataFrame] = None,
                  spreadsheet: str = None,
                  scanpy: anndata.AnnData = None,
                  scanpy_labels: str = None):
@@ -1583,7 +1584,7 @@ class ImmunoPhenoData:
             # Also create a dictionary of antibodies with their IDs for name conversion
             self._ab_ids_dict = _target_ab_dict(_read_antibodies(spreadsheet))
 
-    def __getitem__(self, index: pd.Index | list):
+    def __getitem__(self, index: Union[pd.Index, list]):
         """Allows instances of ImmunoPhenoData to use the indexing operator.
 
         Args:
@@ -1839,7 +1840,7 @@ class ImmunoPhenoData:
             raise AntibodyLookupError(f"{antibody} fits cannot be found.")
 
     def fit_antibody(self,
-                     input: list | str,
+                     input: Union[list, str],
                      ab_name: str = None,
                      transform_type: str = None,
                      transform_scale: int = 1,
