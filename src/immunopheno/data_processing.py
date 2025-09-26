@@ -16,6 +16,7 @@ from tqdm.autonotebook import tqdm
 from sklearn.linear_model import LinearRegression
 from typing import Union
 from .models import _gmm_results, _nb_mle_results
+from .hpca_genes_data import HPCA_GENES
 
 def _load_adt(protein: Union[str, pd.DataFrame]) -> pd.DataFrame:
     """
@@ -273,11 +274,17 @@ def _singleR_rna(rna: pd.DataFrame) -> pd.DataFrame:
 
     # Retrieve list of genes used in SingleR
     # We will filter out unused genes from the RNA dataset that are not in that list
-    hpca_genes_path = str(files('immunopheno.data').joinpath('hpca_genes.txt'))
-    hpca_genes = set(line.strip() for line in open(hpca_genes_path))
+    # hpca_genes_path = str(files('immunopheno.data').joinpath('hpca_genes.txt'))
+    # hpca_genes = set(line.strip() for line in open(hpca_genes_path))
+    # rna_column_genes = pd.Index([x.upper() for x in rna.columns])
+    # return rna.loc[:, rna_column_genes.isin([x.upper() for x in hpca_genes])]
 
+    # The set is now imported directly, no file I/O is needed.
+    # The HPCA_GENES set already contains upper-cased genes.
     rna_column_genes = pd.Index([x.upper() for x in rna.columns])
-    return rna.loc[:, rna_column_genes.isin([x.upper() for x in hpca_genes])]
+
+    # The logic remains the same, but it's now much more robust.
+    return rna.loc[:, rna_column_genes.isin(HPCA_GENES)]
 
 def _read_antibodies(csv_file: str) -> list:
     """
