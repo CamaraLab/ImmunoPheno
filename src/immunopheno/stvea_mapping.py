@@ -815,7 +815,7 @@ class Mapping:
 
         start = time.time()
 
-        if num_chunks == 1:
+        if num_chunks <= 1:
             # Before finding common proteins, drop any proteins that are all 0s
             codex_dropped = remove_all_zeros_or_na(self.stvea.codex_protein)
             cite_dropped = remove_all_zeros_or_na(self.stvea.cite_protein)
@@ -903,16 +903,31 @@ class Mapping:
             # Split codex_subset_shuffled into chunks
             chunks = Mapping.dynamic_chunking(codex_subset_shuffled.index, num_chunks)
             
-            # Process chunks in parallel
-            with Pool(processes=num_cores) as pool:
-                results = pool.starmap(self.process_chunk, [(chunk, 
-                                                             k_find_nn, 
-                                                             k_find_anchor, 
-                                                             k_filter_anchor, 
-                                                             k_score_anchor, 
-                                                             k_find_weights, 
-                                                             nn_option,
-                                                             seed) for chunk in chunks])
+            # If there are multiple chunks but still one core, don't call multiprocessing
+            if num_cores <= 1:
+                results = []
+                for chunk in chunks:
+                    res = self.process_chunk(chunk,
+                                             k_find_nn,
+                                             k_find_anchor,
+                                             k_filter_anchor,
+                                             k_score_anchor,
+                                             k_find_weights,
+                                             nn_option,
+                                             seed)
+                    
+                    results.append(res)
+            else: 
+                # Process chunks in parallel (num_cores > 1)
+                with Pool(processes=num_cores) as pool:
+                    results = pool.starmap(self.process_chunk, [(chunk, 
+                                                                k_find_nn, 
+                                                                k_find_anchor, 
+                                                                k_filter_anchor, 
+                                                                k_score_anchor, 
+                                                                k_find_weights, 
+                                                                nn_option,
+                                                                seed) for chunk in chunks])
             
             end = time.time()
             print(f"map_codex_to_cite: {round(end - start, 3)}")
