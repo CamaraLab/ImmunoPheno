@@ -1,0 +1,87 @@
+# FILE: conda-recipe/meta.yaml
+# This is used to upload a version of ImmunoPheno (Python 3.9 locked) onto conda for Planemo/Galaxy purposes
+
+{% set name = "immunopheno" %}  
+{% set version = "0.1.7" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  - url: https://github.com/CamaraLab/ImmunoPheno/archive/refs/tags/v0.1.0.tar.gz # using same tag, but uploaded new
+    sha256: 98af06ae9204ae5a9bceb74755b700d66451c2de44cd7c7ccf8a6e2a347c06c9 # new hash generated not from WSL, but from conda logs during build
+
+  # Source #2: The pip-only dependency, nxontology
+  - url: https://pypi.io/packages/source/n/nxontology/nxontology-0.5.0.tar.gz
+    # This is the sha256 hash for nxontology v0.5.0
+    sha256: 727712c2bdbcaf7113f0012aa66bb9097ddef375f604939fb279b0871aed2c2f # calculated from conda build
+    # Unpack this source into a clearly named sub-folder
+    folder: nxontology-src
+# --- END OF SOURCE FIX ---
+
+build:
+  noarch: python
+  number: 0
+  script:
+    # First, install nxontology from the local source code we just downloaded.
+    # The --no-build-isolation flag is important here.
+    - "{{ PYTHON }} -m pip install --no-deps --no-build-isolation ./nxontology-src"
+
+    # Second, install the package, as before.
+    - "{{ PYTHON }} -m pip install . --no-deps -vv"
+
+requirements:
+  host:
+    - python 3.9.* # Enforce 3.9 for nxontology
+    - pip
+    - setuptools
+  
+  run:
+    - python 3.9.*
+    - pip
+    - anndata
+    - dash
+    - dash-bootstrap-components
+    # We need both the C-library AND the Python wrapper
+    - graphviz
+    - python-graphviz 
+    - hdbscan >=0.8.31
+    - igraph
+    - matplotlib-base # Use -base for non-GUI environments like Galaxy
+    - multiprocess
+    - nbformat
+    - netgraph
+    - networkx
+    - numba
+    - numpy
+    - pandas
+    - pillow ==10.4.0
+    - plotly
+    - pydot
+    - pydotplus
+    - requests
+    - scikit-learn # conda name is scikit-learn, not sklearn
+    - scanpy
+    - scipy
+    - seaborn
+    - statsmodels
+    - tqdm
+    - umap-learn
+    - fsspec # was missing from nxontology import
+
+    # --- ADDED: The missing dependencies for nxontology ---
+    - pronto        # Solves ModuleNotFoundError: No module named 'pronto'
+    - cachetools    # Another dependency of nxontology
+
+test:
+  imports:
+    - immunopheno
+    - nxontology
+    - graphviz  
+
+about:
+  home: "https://github.com/CamaraLab/ImmunoPheno"
+  summary: "ImmunoPheno is a Python library for the design, annotation, and analysis of multiplexed cytometry data based on existing single-cell CITE-seq datasets."
+  license: "MIT"
+  license_file: "LICENSE"
