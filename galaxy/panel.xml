@@ -1,0 +1,79 @@
+<tool id="immunopheno_panel_design" name="ImmunoPheno Panel Design" version="0.1.1">
+    <description>Designs an optimal antibody panel for a target cell type</description>
+    
+    <requirements>
+        <requirement type="package" version="3.9">python</requirement>
+        <requirement type="package" version="0.1.7">lincolnwu::immunopheno</requirement>
+        <requirement type="package">pandas</requirement>
+        <requirement type="package">matplotlib-base</requirement>
+        <requirement type="package">scikit-learn</requirement>
+        <requirement type="package">pillow</requirement>
+    </requirements>
+    
+    <command detect_errors="aggressive"><![CDATA[
+        python '${__tool_directory__}/panel.py'
+            --target ${target_ids}
+            #if str($background_ids) != '':
+                --background ${background_ids}
+            #end if
+            #if str($tissue_ids) != '':
+                --tissue ${tissue_ids}
+            #end if
+            --panel_size ${panel_size}
+            --imputation ${imputation}
+    ]]></command>
+    
+    <inputs>
+        <param name="target_ids" type="text" area="true" 
+               label="Target Cell Ontology IDs" 
+               help="Enter one or more full Cell Ontology IDs (e.g., CL:0000940), separated by spaces or on new lines.">
+            <sanitizer invalid_char="">
+                <valid initial="string.printable"/>
+            </sanitizer>
+        </param>
+        
+        <param name="background_ids" type="text" area="true" 
+               optional="true" label="Background Cell Ontology IDs (Optional)" 
+               help="Enter Cell Ontology IDs for populations to distinguish against (e.g., CL:0000236), separated by spaces or on new lines.">
+            <sanitizer invalid_char="">
+                <valid initial="string.printable"/>
+            </sanitizer>
+        </param>
+        
+        <param name="tissue_ids" type="text" area="true" 
+               optional="true" label="Tissue Brenda Ontology IDs (Optional)" 
+               help="Restrict the search to specific tissues by providing one or more BTO IDs (e.g., BTO:0000141), separated by spaces or on new lines.">
+            <sanitizer invalid_char="">
+                <valid initial="string.printable"/>
+            </sanitizer>
+        </param>
+
+        <param name="panel_size" type="integer" value="3" label="Desired Antibody Panel Size"/>
+        <param name="imputation" type="float" value="0.35" label="Imputation Tuning Factor" help="Increase if insufficient antibodies are present. Decrease if insufficient cells are present."/>
+    </inputs>
+    
+    <outputs>
+        <data name="optimal_ab" format="csv" from_work_dir="optimal_ab_table.csv" label="Optimal Antibody Panel for ${target_ids}"/>
+        <data name="gating_plots" format="png" from_work_dir="gates.png" label="Gating Plots for ${target_ids}"/>
+        <data name="decision_tree" format="png" from_work_dir="decision_tree.png" label="Decision Tree for ${target_ids}"/>
+        <data name="path_yield_purity" format="json" from_work_dir="path_yield_purity.json" label="Gating Strategies for ${target_ids}"/>
+    </outputs>
+    
+    <help><![CDATA[
+        This tool uses the `optimal_antibody_panel` function from the ImmunoPheno package to design a gating strategy for isolating target cell populations.
+
+        **Inputs**
+
+        - **Target Cell Ontology IDs:** Provide one or more full CL IDs (e.g., `CL:0000940`) for the cell types you want to isolate.
+        - **Panel Size:** The number of antibodies to include in the panel.
+        - **Background IDs (Optional):** Provide CL IDs for cell types you want to explicitly gate *against*.
+        - **Tissue IDs (Optional):** Provide one or more Brenda Tissue Ontology (BTO) IDs (e.g., `BTO:0000141`) to restrict the search to data from specific tissues.
+
+        **Outputs**
+        
+        1. A CSV table of the recommended antibodies and their importance.
+        2. A PNG plot showing the gates.
+        3. A PNG plot of the decision tree corresponding to the gating strategies
+        4. A JSON file with the detailed gating path, purity, and yield statistics.
+    ]]></help>
+</tool>

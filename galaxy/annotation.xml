@@ -1,0 +1,90 @@
+<tool id="immunopheno_annotation" name="ImmunoPheno Annotation" version="0.1.0">
+    <description>Performs cell type annotation on proteomic data</description>
+    
+    <!-- Use the known, working set of Conda requirements -->
+    <requirements>
+        <requirement type="package" version="3.9">python</requirement>
+        <requirement type="package" version="0.1.7">lincolnwu::immunopheno</requirement>
+        <requirement type="package">pandas</requirement>
+        <requirement type="package">scanpy</requirement>
+        <requirement type="package">umap-learn</requirement>
+        <requirement type="package">matplotlib-base</requirement>
+        <requirement type="package">graphviz</requirement>
+        <requirement type="package">python-graphviz</requirement>
+        <requirement type="package">scikit-learn</requirement>
+        <requirement type="package">pillow</requirement>
+    </requirements>
+    
+    <command detect_errors="aggressive"><![CDATA[
+        python '${__tool_directory__}/annotation.py'
+            --protein "${protein_file}"
+            --antibodies_csv "${antibody_file}"
+            --model '${model}'
+
+            #if $spatial_input.spatial_file:
+                --spatial "${spatial_input.spatial_file}"
+                --x_label "${spatial_input.x_label}"
+                --y_label "${spatial_input.y_label}"
+            #end if
+
+            --chunks ${adv.chunks}
+            --imputation ${adv.imputation}
+            --matching ${adv.matching}
+            --sig_expr_threshold ${adv.sig_expr_threshold}
+            --bg_expr_threshold ${adv.bg_expr_threshold}
+    ]]></command>
+    
+    <inputs>
+        <!-- Required Inputs -->
+        <param name="protein_file" type="data" format="csv" label="Protein Counts CSV File" help="Rows = cells, columns = proteins"/>
+        <param name="antibody_file" type="data" format="csv" label="Antibody Spreadsheet CSV File" help="CSV containing RRIDs for each antibody in the protein file"/>
+        <param name="model" type="select" label="Model for fitting">
+            <option value="nb">Negative Binomial</option>
+            <option value="gaussian" selected="true">Gaussian</option>
+        </param>
+
+        <!-- Advanced Annotation Parameters -->
+        <section name="adv" title="Advanced Annotation Parameters" expanded="true">
+            <param name="matching" type="select" label="Antibody Matching Algorithm">
+                <option value="1">Clone</option>
+                <option value="2" selected="true">Antibody Target</option>
+            </param>
+            <param name="imputation" type="float" value="0.5" label="Imputation Tuning Factor" help="Increase if insufficient antibodies are present. Decrease if insufficient cells are present."/>
+            <param name="chunks" type="integer" value="1" label="Number of Chunks" help="Equally divide the dataset in N chunks for annotating large datasets (100k+ cells)"/>
+            <param name="sig_expr_threshold" type="float" value="1.0" label="Signal Expression Threshold"/>
+            <param name="bg_expr_threshold" type="float" value="0.0" label="Background Expression Threshold"/>
+        </section>
+
+        <!-- Optional Spatial Data Section -->
+        <section name="spatial_input" title="Spatial Data (Optional)" expanded="false">
+            <param name="spatial_file" type="data" format="csv" optional="true" label="Spatial Coordinates CSV File" help="If provided, spatial plots will be generated instead of UMAPs."/>
+            <param name="x_label" type="text" value="x_coord" label="Name of X coordinate column"/>
+            <param name="y_label" type="text" value="y_coord" label="Name of Y coordinate column"/>
+        </section>
+
+        
+    </inputs>
+    
+    <outputs>
+        <data name="output_labels" format="csv" from_work_dir="immunopheno_labels.csv" label="Predicted Labels on ${on_string}"/>
+        <data name="output_plot" format="png" from_work_dir="combined_plot.png" label="Annotation Plots on ${on_string}">
+            <!-- <discover_datasets pattern="(?P<name>spatial_combined|combined_umap)\.png" format="png" visible="true" /> -->
+        </data>
+    </outputs>
+    
+    <help><![CDATA[
+        This tool performs cell type annotation on CITE-seq data using the ImmunoPheno `run_stvea` function.
+
+        **Inputs**
+
+        - **Protein Counts:** A CSV file where rows are cells and columns are protein markers. You can optionally provide a spatial coordinates file, with a matching index to those in the protein counts, as well as two columns for the X and Y coordinates
+        - **Antibody Spreadsheet:** A CSV file mapping the protein markers in your counts file to RRIDs.
+        
+        **Output**
+
+        The tool produces two files:
+
+        1. A CSV file containing the predicted cell type labels for each cell.
+        2. A PNG image comparing the data before and after annotation. This will be a spatial plot if you provide spatial coordinates, or a UMAP otherwise.
+    ]]></help>
+</tool>

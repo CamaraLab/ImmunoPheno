@@ -1,0 +1,59 @@
+<tool id="immunopheno_which_query" name="ImmunoPheno Database Query" version="0.1.0">
+    <description>Finds antibodies, cell types, or experiments in the ImmunoPheno DB</description>
+    
+    <requirements>
+        <requirement type="package" version="3.9">python</requirement>
+        <requirement type="package" version="0.1.7">lincolnwu::immunopheno</requirement>
+        <requirement type="package">pandas</requirement>
+    </requirements>
+    
+    <command detect_errors="aggressive"><![CDATA[
+        python '${__tool_directory__}/which_query.py'
+            --query_term '${query.query_term}'
+            #if $query.query_type == 'antibodies':
+                --antibodies
+            #elif $query.query_type == 'celltypes':
+                --celltypes
+            #else
+                --experiments
+            #end if
+    ]]></command>
+    
+    <inputs>
+        <conditional name="query">
+            <param name="query_type" type="select" label="What would you like to search for?">
+                <option value="celltypes" selected="true">Cell Types</option>
+                <option value="antibodies">Antibodies</option>
+                <option value="experiments">Experiments</option>
+            </param>
+            <when value="antibodies">
+                <param name="query_term" type="text" label="Antibody Query Term" help="e.g., CD4, CD8a, AB_2800724"/>
+            </when>
+            <when value="celltypes">
+                <param name="query_term" type="text" label="Cell Type Query Term" help="e.g., mucosal, B cell, T cell"/>
+            </when>
+            <when value="experiments">
+                <param name="query_term" type="text" label="Experiment Query Term" help="e.g., bone marrow, tonsil"/>
+            </when>
+        </conditional>
+    </inputs>
+    
+    <outputs>
+        <data name="output_query_result" format="csv" from_work_dir="query_result.csv" label="Query Result for ${query.query_term}"/>
+    </outputs>
+    
+    <help><![CDATA[
+        This tool queries the public ImmunoPheno.org database to find information about specific antibodies, cell types, or experiments.
+
+        Select the type of information you want to find, then enter a search term.
+
+        **Inputs**
+        
+        - Query Term: a word or phrase. For example, "CD4" for antibodies, "B cell" for cell types, and "bone marrow" for experiments
+
+        **Outputs**
+        
+        1. CSV Table either containing the search results from antibodies, cell types, or experiment data. This can be used as input for other ImmunoPheno tools.
+        
+    ]]></help>
+</tool>

@@ -1,0 +1,92 @@
+<tool id="immunopheno_normalization" name="ImmunoPheno Normalization" version="0.1.1">
+    <description>Normalizes CITE-seq data and generates UMAPs</description>
+    
+    <requirements>
+        <requirement type="package" version="3.9">python</requirement>
+        <requirement type="package" version="0.1.7">lincolnwu::immunopheno</requirement>
+        <requirement type="package">pandas</requirement>
+        <requirement type="package">scanpy</requirement>
+        <requirement type="package">umap-learn</requirement>
+        <requirement type="package">matplotlib-base</requirement>
+        <requirement type="package">graphviz</requirement>
+        <requirement type="package">python-graphviz</requirement>
+        <requirement type="package">scikit-learn</requirement>
+    </requirements>
+    
+    <command detect_errors="aggressive"><![CDATA[
+        python '${__tool_directory__}/normalization.py'
+            --model '${model}'
+            --output_csv "normalized_counts.csv"
+            --umap "umap.png"
+
+            #if $input_mode.input_type == "csv":
+                --protein "${input_mode.protein}"
+                #if $input_mode.rna:
+                    --rna "${input_mode.rna}"
+                #end if
+                #if $input_mode.labels:
+                    --labels "${input_mode.labels}"
+                #end if
+            #else:
+                --scanpy_path "${input_mode.scanpy_path}"
+                #if str($input_mode.scanpy_labels) != '':
+                    --scanpy_labels "${input_mode.scanpy_labels}"
+                #end if
+            #end if
+
+            --sig_expr_threshold ${adv.sig_expr_threshold}
+            --bg_expr_threshold ${adv.bg_expr_threshold}
+            --p_threshold ${adv.p_threshold}
+            --bg_cell_z_score ${adv.bg_cell_z_score}
+    ]]></command>
+    
+    <inputs>
+        <conditional name="input_mode">
+            <param name="input_type" type="select" label="Select your input data format">
+                <option value="csv" selected="true">From CSV files</option>
+                <option value="scanpy">From Scanpy (h5ad) file</option>
+            </param>
+            <when value="csv">
+                <param name="protein" type="data" format="csv" label="Protein Counts CSV File"/>
+                <param name="rna" type="data" format="csv" optional="true" label="RNA Counts CSV File (Optional)"/>
+                <param name="labels" type="data" format="csv" optional="true" label="Cell Labels CSV File (Optional)"/>
+            </when>
+            <when value="scanpy">
+                <param name="scanpy_path" type="data" format="h5ad" label="Scanpy AnnData File"/>
+                <param name="scanpy_labels" type="text" optional="true" label="Labels field name in Scanpy object (Optional)" help="e.g., cell_type"/>
+            </when>
+        </conditional>
+        <param name="model" type="select" label="Model for fitting">
+            <option value="nb" selected="true">Negative Binomial</option>
+            <option value="gaussian">Gaussian</option>
+        </param>
+        <section name="adv" title="Advanced Normalization Parameters" expanded="true">
+            <param name="sig_expr_threshold" type="float" value="1.0" label="Signal Expression Threshold"/>
+            <param name="bg_expr_threshold" type="float" value="0.0" label="Background Expression Threshold"/>
+            <param name="p_threshold" type="float" value="0.05" label="P-value Threshold"/>
+            <param name="bg_cell_z_score" type="float" value="10.0" label="Background Cell Z-score"/>
+        </section>
+    </inputs>
+    
+    <outputs>
+        <data name="output_csv" format="csv" from_work_dir="normalized_counts.csv" label="Normalized Counts on ${on_string}"/>
+        <data name="output_umap" format="png" from_work_dir="umap.png" label="UMAP Plots on ${on_string}"/>
+    </outputs>
+    
+    <help><![CDATA[
+        This tool normalizes protein expression data from CITE-seq experiments using the ImmunoPheno package.
+
+        **Inputs**
+
+        You can provide data in two ways:
+
+        - **CSV Files:** Provide a CSV of protein counts (cells as rows, proteins as columns). You can optionally provide matching RNA counts and cell labels.
+        - The cell labels must contain a matching index to those found in protein/rna data, as well as a column labelled "celltype"
+        - **Scanpy/AnnData File:** Provide a single `.h5ad` file. Protein counts should be in `.obsm['protein_expression']`.
+
+        **Outputs**
+
+        1. CSV File with normalized counts
+        2. PNG image containing UMAP plots of the raw and normalized data
+    ]]></help>
+</tool>
