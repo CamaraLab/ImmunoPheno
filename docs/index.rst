@@ -27,6 +27,14 @@ Contents
    notebooks/Example_4
 
 .. toctree::
+   :maxdepth: 1
+   :caption: GALAXY USAGE
+
+   galaxy_normalization
+   galaxy_annotation
+   galaxy_panel
+
+.. toctree::
    :maxdepth: 2
    :caption: API
 
