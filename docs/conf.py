@@ -6,7 +6,7 @@ import numpy
 # -- Project information
 
 project = 'ImmunoPheno'
-copyright = '2024, Pablo Cámara'
+copyright = '2025, Pablo Cámara'
 author = 'Pablo Cámara'
 
 release = '0.1'
