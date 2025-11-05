@@ -1,9 +1,9 @@
-<tool id="immunopheno_which_query" name="ImmunoPheno Database Query" version="0.1.0">
-    <description>Finds antibodies, cell types, or experiments in the ImmunoPheno DB</description>
+<tool id="immunopheno_which_query" name="ImmunoPheno Database Query">
+    <description>Finds antibodies, cell types, or experiments in the ImmunoPhenoDB</description>
     
     <requirements>
         <requirement type="package" version="3.9">python</requirement>
-        <requirement type="package" version="0.1.7">lincolnwu::immunopheno</requirement>
+        <requirement type="package" version="0.1.8">lincolnwu::immunopheno</requirement>
         <requirement type="package">pandas</requirement>
     </requirements>
     
@@ -49,11 +49,19 @@
 
         **Inputs**
         
-        - Query Term: a word or phrase. For example, "CD4" for antibodies, "B cell" for cell types, and "bone marrow" for experiments
+        **Query Term**: a word or phrase. 
+        
+        - **Example**: "CD4" for antibodies, "B cell" for cell types, and "bone marrow" for experiments
 
         **Outputs**
         
-        1. CSV Table either containing the search results from antibodies, cell types, or experiment data. This can be used as input for other ImmunoPheno tools.
+        The tool produces one file:
+
+        1. CSV Table either containing the search results from antibodies, cell types, or experiment data. This can be used as input for other ImmunoPheno tools, such as the "ImmunoPheno Panel Design" tool.
         
+        **Tutorial**
+
+        A tutorial on using this tool can be found in ImmunoPheno's documentation: https://immunopheno.readthedocs.io/en/main/galaxy_panel.html.
+
     ]]></help>
 </tool>

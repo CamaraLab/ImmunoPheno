@@ -1,10 +1,9 @@
-<tool id="immunopheno_annotation" name="ImmunoPheno Annotation" version="0.1.0">
+<tool id="immunopheno_annotation" name="ImmunoPheno Annotation">
     <description>Performs cell type annotation on proteomic data</description>
     
-    <!-- Use the known, working set of Conda requirements -->
     <requirements>
         <requirement type="package" version="3.9">python</requirement>
-        <requirement type="package" version="0.1.7">lincolnwu::immunopheno</requirement>
+        <requirement type="package" version="0.1.8">lincolnwu::immunopheno</requirement>
         <requirement type="package">pandas</requirement>
         <requirement type="package">scanpy</requirement>
         <requirement type="package">umap-learn</requirement>
@@ -38,7 +37,15 @@
         <!-- Required Inputs -->
         <param name="protein_file" type="data" format="csv" label="Protein Counts CSV File" help="Rows = cells, columns = proteins"/>
         <param name="antibody_file" type="data" format="csv" label="Antibody Spreadsheet CSV File" help="CSV containing RRIDs for each antibody in the protein file"/>
-        <param name="model" type="select" label="Model for fitting">
+        
+        <!-- Optional Spatial Data Section -->
+        <section name="spatial_input" title="Spatial Data (Optional)" expanded="true">
+            <param name="spatial_file" type="data" format="csv" optional="true" label="Spatial Coordinates CSV File" help="If provided, spatial plots will be generated instead of UMAPs."/>
+            <param name="x_label" type="text" value="x_coord" label="Name of X coordinate column"/>
+            <param name="y_label" type="text" value="y_coord" label="Name of Y coordinate column"/>
+        </section>
+
+        <param name="model" type="select" label="Model for Normalization">
             <option value="nb">Negative Binomial</option>
             <option value="gaussian" selected="true">Gaussian</option>
         </param>
@@ -49,42 +56,87 @@
                 <option value="1">Clone</option>
                 <option value="2" selected="true">Antibody Target</option>
             </param>
-            <param name="imputation" type="float" value="0.5" label="Imputation Tuning Factor" help="Increase if insufficient antibodies are present. Decrease if insufficient cells are present."/>
+            <param name="imputation" type="float" value="0.5" label="Imputation Tuning Factor" help="Increase if insufficient antibodies are present in the reference dataset. Decrease if insufficient cells are present."/>
             <param name="chunks" type="integer" value="1" label="Number of Chunks" help="Equally divide the dataset in N chunks for annotating large datasets (100k+ cells)"/>
-            <param name="sig_expr_threshold" type="float" value="1.0" label="Signal Expression Threshold"/>
-            <param name="bg_expr_threshold" type="float" value="0.0" label="Background Expression Threshold"/>
+            <param name="sig_expr_threshold" type="float" value="1.0" label="Signal Expression Threshold"
+                   help="Cells with a percentage of expressed proteins above this threshold are filtered out."/>
+            <param name="bg_expr_threshold" type="float" value="0.0" label="Background Expression Threshold"
+                   help="Cells with a percentage of expressed proteins below this threshold are filtered out."/>
         </section>
 
-        <!-- Optional Spatial Data Section -->
-        <section name="spatial_input" title="Spatial Data (Optional)" expanded="false">
-            <param name="spatial_file" type="data" format="csv" optional="true" label="Spatial Coordinates CSV File" help="If provided, spatial plots will be generated instead of UMAPs."/>
-            <param name="x_label" type="text" value="x_coord" label="Name of X coordinate column"/>
-            <param name="y_label" type="text" value="y_coord" label="Name of Y coordinate column"/>
-        </section>
-
-        
     </inputs>
     
     <outputs>
         <data name="output_labels" format="csv" from_work_dir="immunopheno_labels.csv" label="Predicted Labels on ${on_string}"/>
-        <data name="output_plot" format="png" from_work_dir="combined_plot.png" label="Annotation Plots on ${on_string}">
-            <!-- <discover_datasets pattern="(?P<name>spatial_combined|combined_umap)\.png" format="png" visible="true" /> -->
-        </data>
+        <data name="output_plot" format="png" from_work_dir="combined_plot.png" label="Annotation Plots on ${on_string}"></data>
     </outputs>
     
     <help><![CDATA[
-        This tool performs cell type annotation on CITE-seq data using the ImmunoPheno `run_stvea` function.
+
+        This tool performs cell type annotation on proteomic cytometry data (mIHC, CODEX, etc) using the ImmunoPheno `run_stvea` function.
 
         **Inputs**
 
-        - **Protein Counts:** A CSV file where rows are cells and columns are protein markers. You can optionally provide a spatial coordinates file, with a matching index to those in the protein counts, as well as two columns for the X and Y coordinates
-        - **Antibody Spreadsheet:** A CSV file mapping the protein markers in your counts file to RRIDs.
+        **Protein Counts:** A CSV file containing the raw counts, where the rows are cells and columns are protein markers.  
+        You can optionally provide a spatial coordinates file, with a matching index to those in the protein counts, 
+        as well as two columns for the X and Y coordinates.
+
+        - For example, the protein data should look like:
+
+            +------------------------+------------+----------+------------+----------+------------+----------+ 
+            |                        | CD11a                 | CD3                   | CD56                  |
+            +========================+============+==========+============+==========+============+==========+
+            | cell_barcode_1         | 3                     | 0                     | 2                     |
+            +------------------------+------------+----------+------------+----------+------------+----------+
+            | cell_barcode_2         | 6                     | 4                     | 0                     |
+            +------------------------+-----------------------+-----------------------+-----------------------+
+            | cell_barcode_3         | 10                    | 52                    | 32                    |
+            +------------------------+-----------------------+-----------------------+-----------------------+
         
+        
+
+        **Antibody Spreadsheet:** A CSV file mapping the protein markers in your counts file to RRIDs. 
+        This spreadsheet must contain a line called "Antibody table" with the antibody names and IDs underneath. The
+        names of the antibodies must correspond with those in the protein table.
+        
+        - For example, the antibody spreadsheet should look like:
+
+            +------------------------+------------+----------+ 
+            | Antibody table:        |                       |
+            +========================+============+==========+
+            | CD11a                  | AB_2734365            |
+            +------------------------+------------+----------+
+            | CD3                    | AB_2734246            |
+            +------------------------+-----------------------+
+            | CD56                   | AB_2749970            |
+            +------------------------+-----------------------+
+
+
+        **Spatial Data (optional)**: A CSV file containing the 2D spatial coordinates of each cell from the protein data.
+        The rows must match those found in the protein data, while the X and Y-coordinate columns can be modified.
+
+        - For example, the spatial data should look like:
+
+            +------------------------+------------+----------+------------+----------+
+            |                        | x_coord               | y_coord               |
+            +========================+============+==========+============+==========+
+            | cell_barcode_1         | 123.0                 | 451.4                 | 
+            +------------------------+------------+----------+------------+----------+
+            | cell_barcode_2         | 70.0                  | 170.3                 |
+            +------------------------+-----------------------+-----------------------+
+            | cell_barcode_3         | 101.3                 | 23.3                  |
+            +------------------------+-----------------------+-----------------------+
+
         **Output**
 
         The tool produces two files:
 
         1. A CSV file containing the predicted cell type labels for each cell.
         2. A PNG image comparing the data before and after annotation. This will be a spatial plot if you provide spatial coordinates, or a UMAP otherwise.
+
+        **Tutorial**
+
+        A tutorial on using this tool can be found in ImmunoPheno's documentation: https://immunopheno.readthedocs.io/en/main/galaxy_annotation.html.
+
     ]]></help>
 </tool>

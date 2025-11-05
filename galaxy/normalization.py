@@ -7,192 +7,107 @@ import umap
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-def plot_UMAP(IPD: ImmunoPhenoData,
-              normalized: bool = False,
-              force_update: bool = False,
-              random_state: int = 42,
-              **kwargs):
-    """ Plots a UMAP for the non-normalized protein values or normalized protein values
-
-    Args:
-        IPD (ImmunoPhenoData Object): object containing protein data,
-            gene data, and cell types
-        normalized (bool): option to plot normalized values
-        force_update (bool): option to compute a new UMAP, replacing stored plots
-        **kwargs: various arguments to UMAP class constructor, including default values:
-            n_neighbors (int): 15
-            min_dist (float): 0.1 
-            n_components (int): 2
-            metric (str): "euclidean"
-
-    Returns:
-        go.Figure: UMAP projection of non/normalized protein values with a corresponding
-        legend of cell type (if available)
-    """
-    # Check if existing UMAP is present in class AND UMAP parameters have not changed
-    if (IPD._umap_kwargs == (random_state, kwargs) and IPD._raw_umap is not None) and normalized is False and force_update is False:
-        # If so, return the stored UMAP
-        return IPD._raw_umap
-    elif (IPD._umap_kwargs == (random_state, kwargs) and IPD._norm_umap is not None) and normalized is True and force_update is False:
-        return IPD._norm_umap
-    else:
-        # If no UMAP or kwargs are different, generate a new one and store in class
-        umap_plot = umap.UMAP(random_state=random_state, **kwargs)
-
-        # Store new kwargs in class
-        IPD._umap_kwargs = (random_state, kwargs)
-        
-        if normalized:
-            norm_projections = umap_plot.fit_transform(IPD.normalized_counts)
-        else:
-            raw_projections = umap_plot.fit_transform(IPD.protein)
-        
-        # Normalized UMAP without cell labels
-        if IPD.labels is None and normalized:
-            # Create Seaborn plot
-            fig, ax = plt.subplots(figsize=(16, 6))
-            sns.scatterplot(
-                x=norm_projections[:, 0],
-                y=norm_projections[:, 1],
-                s=7,
-                ax=ax,
-            )
-            ax.set_title("Normalized Protein Expression UMAP")
-            plt.tight_layout()
-            return fig
-
-        # Un-normalized UMAP without cell labels
-        elif IPD._cell_labels is None and not normalized:
-            # Create Seaborn plot
-            fig, ax = plt.subplots(figsize=(16, 6))
-            sns.scatterplot(
-                x=raw_projections[:, 0],
-                y=raw_projections[:, 1],
-                s=7,
-                ax=ax,
-            )
-            ax.set_title("Regular Protein Expression UMAP")
-            plt.tight_layout()
-            return fig
-
-        # Normalized UMAP plot with cell labels
-        if IPD.labels is not None and normalized:
-            # NOTE: if the provided labels contains more cells than present in normalized_counts
-            # Find shared index in the IPD.labels based on cells ONLY in normalized_counts
-            common_indices = IPD.normalized_counts.index.intersection(IPD.labels.index)
-
-            # Check the number of columns
-            num_columns = IPD.labels.shape[1]
-            # Check if there is at least one column and if the second column is not empty
-            if num_columns > 1 and not IPD.labels.iloc[:, 1].isnull().all():
-                # Use the values from the second column
-                norm_types = IPD.labels.iloc[:, 1].loc[common_indices].tolist()
-
-            else:
-                # If there is no second column or it is empty, use the values from the first column
-                norm_types = IPD.labels.iloc[:, 0].loc[common_indices].tolist()
-
-            # Create Seaborn plot
-            fig, ax = plt.subplots(figsize=(16, 6))
-            sns.scatterplot(
-                x=norm_projections[:, 0],
-                y=norm_projections[:, 1],
-                hue=norm_types,
-                palette="tab20",
-                s=7,
-                ax=ax,
-                legend="full"
-            )
-            ax.legend(title="Cell Type", bbox_to_anchor=(1.05, 1), loc='upper left', markerscale=2)
-            ax.set_title("Normalized Protein Expression UMAP")
-            plt.tight_layout()
-            return fig
-            
-        # Not normalized UMAP plot with cell labels
-        elif IPD._cell_labels is not None and not normalized:
-            # Check the number of columns
-            num_columns = IPD._cell_labels.shape[1]
-            # Check if there is at least one column and if the second column is not empty
-            if num_columns > 1 and not IPD._cell_labels.iloc[:, 1].isnull().all():
-                # Use the values from the second column
-                raw_types = IPD._cell_labels.iloc[:, 1].tolist()
-            else:
-                # If there is no second column or it is empty, use the values from the first column
-                raw_types = IPD._cell_labels.iloc[:, 0].tolist()
-
-            # Create Seaborn plot
-            fig, ax = plt.subplots(figsize=(16, 6))
-            sns.scatterplot(
-                x=raw_projections[:, 0],
-                y=raw_projections[:, 1],
-                hue=raw_types,
-                palette="tab20",
-                s=7,
-                ax=ax,
-                legend="full"
-            )
-            ax.legend(title="Cell Type", bbox_to_anchor=(1.05, 1), loc='upper left', markerscale=2)
-            ax.set_title("Regular Protein Expression UMAP")
-            plt.tight_layout()
-            return fig
-        
 def combine_umap_plots(IPD, **kwargs):
     """
-    Generates two UMAP plots (normalized and unnormalized) and combines them into a single figure.
+    Generates and combines unnormalized and normalized UMAP plots into a single figure,
+    correctly handling differences in cell counts and using constrained_layout to prevent overlap.
 
     Args:
         IPD: ImmunoPhenoData object containing protein and label data.
+        random_state (int): The random state for UMAP for reproducibility.
         **kwargs: Optional arguments to pass to the UMAP class constructor.
 
     Returns:
-        None: Saves the combined figure as a PNG.
+        matplotlib.figure.Figure: The combined figure object.
     """
-    # Call your existing plot_UMAP function twice to generate two figures
-    fig_raw = plot_UMAP(IPD=IPD, normalized=False, **kwargs)   # Unnormalized plot
-    fig_norm = plot_UMAP(IPD=IPD, normalized=True, **kwargs)   # Normalized plot
+    # Create a figure with two subplots using the robust constrained_layout engine
+    fig_final, (ax1, ax2) = plt.subplots(2, 1, figsize=(16, 16), constrained_layout=True)
 
-    # Extract the axes from the two existing figures
-    ax_raw = fig_raw.axes[0]
-    ax_norm = fig_norm.axes[0]
+    # If no UMAP or kwargs are different, generate a new one and store in class
+    umap_plot = umap.UMAP(random_state=42, **kwargs)
 
-    # Create a new figure with two vertically stacked subplots
-    combined_fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(16, 12))  # Two rows, one column
+    norm_projections = umap_plot.fit_transform(IPD.normalized_counts)
+    raw_projections = umap_plot.fit_transform(IPD.protein)
+    
+    # ---- Make unnormalized UMAP first
+    if IPD._cell_labels is None:
+        sns.scatterplot(
+            x=raw_projections[:, 0],
+            y=raw_projections[:, 1],
+            s=7,
+            ax=ax1,
+        )
+        ax1.set_title("Regular Protein Expression UMAP")
+        plt.tight_layout()
 
-    # Copy data from the original axes to the new subplots
-    # Copying for the unnormalized plot (top)
-    for line in ax_raw.lines:
-        ax1.plot(line.get_xdata(), line.get_ydata(), linestyle=line.get_linestyle(), 
-                 color=line.get_color(), marker='o', markersize=1)
-    for col in ax_raw.collections:
-        ax1.scatter(col.get_offsets()[:, 0], col.get_offsets()[:, 1], 
-                    color=col.get_facecolor(), s=7)
+    if IPD._cell_labels is not None:
+        # Check the number of columns
+        num_columns = IPD._cell_labels.shape[1]
+        # Check if there is at least one column and if the second column is not empty
+        if num_columns > 1 and not IPD._cell_labels.iloc[:, 1].isnull().all():
+            # Use the values from the second column
+            raw_types = IPD._cell_labels.iloc[:, 1].tolist()
+        else:
+            # If there is no second column or it is empty, use the values from the first column
+            raw_types = IPD._cell_labels.iloc[:, 0].tolist()
 
-    # Copying for the normalized plot (bottom)
-    for line in ax_norm.lines:
-        ax2.plot(line.get_xdata(), line.get_ydata(), linestyle=line.get_linestyle(), 
-                 color=line.get_color(), marker='o', markersize=1)
-    for col in ax_norm.collections:
-        ax2.scatter(col.get_offsets()[:, 0], col.get_offsets()[:, 1], 
-                    color=col.get_facecolor(), s=7)
+        sns.scatterplot(
+            x=raw_projections[:, 0],
+            y=raw_projections[:, 1],
+            hue=raw_types,
+            palette="tab20",
+            s=7,
+            ax=ax1,
+            legend="full"
+        )
+        ax1.legend(title="Cell Type", bbox_to_anchor=(1.05, 1), loc='upper left', markerscale=2)
+        ax1.set_title("Regular Protein Expression UMAP")
+        plt.tight_layout()
 
-    # Set titles for the subplots
-    ax1.set_title("Regular Protein Expression UMAP")
-    ax2.set_title("Normalized Protein Expression UMAP")
+    # ---- Normalized UMAP without cell labels
+    if IPD.labels is None:
+        sns.scatterplot(
+            x=norm_projections[:, 0],
+            y=norm_projections[:, 1],
+            s=7,
+            ax=ax2,
+        )
+        ax2.set_title("Normalized Protein Expression UMAP")
+        plt.tight_layout()
 
-    # Add legends outside of the axes
-    if ax_raw.get_legend() is not None:
-        ax1.legend(*ax_raw.get_legend_handles_labels(), title="Cell Type", 
-                   loc='upper left', bbox_to_anchor=(1.05, 1), markerscale=2)  # Right of plot
-    if ax_norm.get_legend() is not None:
-        ax2.legend(*ax_norm.get_legend_handles_labels(), title="Cell Type", 
-                   loc='upper left', bbox_to_anchor=(1.05, 1), markerscale=2)  # Right of plot
+    # Normalized UMAP plot with cell labels
+    if IPD.labels is not None:
+        # NOTE: if the provided labels contains more cells than present in normalized_counts
+        # Find shared index in the IPD.labels based on cells ONLY in normalized_counts
+        common_indices = IPD.normalized_counts.index.intersection(IPD.labels.index)
 
-    # Adjust layout to fit the legends
-    plt.subplots_adjust(right=0.8, hspace=0.4)  # Give extra space for legends and adjust height
+        # Check the number of columns
+        num_columns = IPD.labels.shape[1]
+        # Check if there is at least one column and if the second column is not empty
+        if num_columns > 1 and not IPD.labels.iloc[:, 1].isnull().all():
+            # Use the values from the second column
+            norm_types = IPD.labels.iloc[:, 1].loc[common_indices].tolist()
 
-    # Adjust layout and save the combined figure
-    plt.tight_layout()
-    return combined_fig
+        else:
+            # If there is no second column or it is empty, use the values from the first column
+            norm_types = IPD.labels.iloc[:, 0].loc[common_indices].tolist()
+
+        # Create Seaborn plot
+        # fig, ax = plt.subplots(figsize=(16, 6))
+        sns.scatterplot(
+            x=norm_projections[:, 0],
+            y=norm_projections[:, 1],
+            hue=norm_types,
+            palette="tab20",
+            s=7,
+            ax=ax2,
+            legend="full"
+        )
+        ax2.legend(title="Cell Type", bbox_to_anchor=(1.05, 1), loc='upper left', markerscale=2)
+        ax2.set_title("Normalized Protein Expression UMAP")
+        plt.tight_layout()
+
+    return fig_final
 
 def main(model, 
          output_csv,
@@ -227,7 +142,10 @@ def main(model,
             print(f"Normalized counts saved to {output_csv}")
 
             print("Generating UMAPs...")
-            double_UMAP = combine_umap_plots(IPD=ipd).savefig(output_umap)
+            # Generate the figure
+            combined_fig = combine_umap_plots(IPD=ipd)
+            # Save the figure, adjusting the size to fit the legends
+            combined_fig.savefig(output_umap, bbox_inches='tight')
             print("UMAP saved to:", output_umap)
 
         # Protein and RNA
@@ -245,7 +163,10 @@ def main(model,
             print(f"Normalized counts saved to {output_csv}")
 
             print("Generating UMAPs...")
-            double_UMAP = combine_umap_plots(IPD=ipd).savefig(output_umap)
+            # Generate the figure
+            combined_fig = combine_umap_plots(IPD=ipd)
+            # Save the figure, adjusting the size to fit the legends
+            combined_fig.savefig(output_umap, bbox_inches='tight')
             print("UMAP saved to:", output_umap)
 
         # Protein, RNA, labels
@@ -264,40 +185,49 @@ def main(model,
             print(f"Normalized counts saved to {output_csv}")
 
             print("Generating UMAPs...")
-            double_UMAP = combine_umap_plots(IPD=ipd).savefig(output_umap)
+            # Generate the figure
+            combined_fig = combine_umap_plots(IPD=ipd)
+            # Save the figure, adjusting the size to fit the legends
+            combined_fig.savefig(output_umap, bbox_inches='tight')
             print("UMAP saved to:", output_umap)
     
     elif scanpy_path and not protein_csv_file_path:
         # Scanpy with labels
         if scanpy_labels:    
-            pbmc = sc.read_h5ad(scanpy_path)
-            pbmc_ipd = ImmunoPhenoData(scanpy=pbmc, scanpy_labels=scanpy_labels)
-            pbmc_ipd.fit_all_antibodies(model=model)
-            pbmc_ipd.normalize_all_antibodies(sig_expr_threshold=sig_expr_threshold, 
+            sc_ipd = sc.read_h5ad(scanpy_path)
+            ipd = ImmunoPhenoData(scanpy=sc_ipd, scanpy_labels=scanpy_labels)
+            ipd.fit_all_antibodies(model=model)
+            ipd.normalize_all_antibodies(sig_expr_threshold=sig_expr_threshold, 
                                             bg_expr_threshold=bg_expr_threshold, 
                                             p_threshold=p_threshold, 
                                             bg_cell_z_score=bg_cell_z_score)
-            pbmc_ipd.normalized_counts.to_csv(output_csv)
+            ipd.normalized_counts.to_csv(output_csv)
             print(f"Normalized counts saved to {output_csv}")
 
             print("Generating UMAPs...")
-            double_UMAP = combine_umap_plots(IPD=pbmc_ipd).savefig(output_umap)
+            # Generate the figure
+            combined_fig = combine_umap_plots(IPD=ipd)
+            # Save the figure, adjusting the size to fit the legends
+            combined_fig.savefig(output_umap, bbox_inches='tight')
             print("UMAP saved to:", output_umap)
         
         # Scanpy without labels
         else:
-            pbmc = sc.read_h5ad(scanpy_path)
-            pbmc_ipd = ImmunoPhenoData(scanpy=pbmc)
-            pbmc_ipd.fit_all_antibodies(model=model)
-            pbmc_ipd.normalize_all_antibodies(sig_expr_threshold=sig_expr_threshold, 
+            sc_ipd = sc.read_h5ad(scanpy_path)
+            ipd = ImmunoPhenoData(scanpy=sc_ipd)
+            ipd.fit_all_antibodies(model=model)
+            ipd.normalize_all_antibodies(sig_expr_threshold=sig_expr_threshold, 
                                             bg_expr_threshold=bg_expr_threshold, 
                                             p_threshold=p_threshold, 
                                             bg_cell_z_score=bg_cell_z_score)
-            pbmc_ipd.normalized_counts.to_csv(output_csv)
+            ipd.normalized_counts.to_csv(output_csv)
             print(f"Normalized counts saved to {output_csv}")
 
             print("Generating UMAPs...")
-            double_UMAP = combine_umap_plots(IPD=pbmc_ipd).savefig(output_umap)
+            # Generate the figure
+            combined_fig = combine_umap_plots(IPD=ipd)
+            # Save the figure, adjusting the size to fit the legends
+            combined_fig.savefig(output_umap, bbox_inches='tight')
             print("UMAP saved to:", output_umap)
     else:
         print("Error: Invalid combination of arguments. Please provide the necessary data files and parameters.")
@@ -307,7 +237,7 @@ def process_args(args):
         "model": args.model,
         "sig_expr_threshold": args.sig_expr_threshold,
         "bg_expr_threshold": args.bg_expr_threshold,
-        "p_threshold": args.p_threshold,
+        # "p_threshold": args.p_threshold,
         "bg_cell_z_score": args.bg_cell_z_score
     }
 
@@ -350,7 +280,7 @@ if __name__ == "__main__":
         -o, --output_csv            Custom name of output CSV containing normalized counts
         -s, --sig_expr_threshold    Signal expression threshold (default: 1)
         -b, --bg_expr_threshold     Background expression threshold (default: 0)
-        -p, --p_threshold           P-value threshold (default: 0.05)
+        # -p, --p_threshold           P-value threshold (default: 0.05)
         -z, --bg_cell_z_score       Background cell z-score (default: 10.0)
         '''
     )
@@ -370,7 +300,7 @@ if __name__ == "__main__":
     # Parameters for normalization filtering
     parser.add_argument("-s", "--sig_expr_threshold", type=float, default=1, help="Signal expression threshold")
     parser.add_argument("-b", "--bg_expr_threshold", type=float, default=0, help="Background expression threshold")
-    parser.add_argument("-p", "--p_threshold", type=float, default=0.05, help="P-value threshold")
+    # parser.add_argument("-p", "--p_threshold", type=float, default=0.05, help="P-value threshold")
     parser.add_argument("-z", "--bg_cell_z_score", type=float, default=10, help="Background cell z-score")
 
     args = parser.parse_args()

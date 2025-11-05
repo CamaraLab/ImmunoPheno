@@ -1,5 +1,3 @@
-# --- START OF FILE which_query.py (Corrected) ---
-
 import argparse
 import pandas as pd
 from immunopheno.connect import ImmunoPhenoDB_Connect

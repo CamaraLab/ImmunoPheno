@@ -33,7 +33,8 @@ def main(target=None,
         panel_size=panel_size,
         rho=imputation_factor,
         plot_gates=plot_gates, 
-        plot_decision_tree=plot_decision_tree)
+        plot_decision_tree=plot_decision_tree,
+        merge_option=1)
     
     # --- Save all results to predictable filenames ---
     print("Saving results...")
@@ -92,7 +93,7 @@ if __name__ == "__main__":
         required=False,
         help="One or more tissue Brenda Ontology IDs (e.g., BTO:0000141, BTO:0004122)"
     )
-    
+
     parser.add_argument(
         "-p", "--panel_size", 
         type=int, 

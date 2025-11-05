@@ -407,21 +407,3 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     process_args(args)
-
-
-# plot_spatial(pd.read_csv("spat_copy_celltype.csv", index_col = 0), normalized=True)
-
-# main(protein_csv_file_path="tonsil_crop_protein.csv",
-#      spatial_coord_csv_file_path="tonsil_crop_spatial.csv",
-#      antibody_spreadsheet_csv_file_path="tonsil_spreadsheet.csv",
-#      model="gaussian",
-#      antibody_matching_option=1,
-#      imputation_factor=0.5,
-#      num_chunks=1)
-
-# main(protein_csv_file_path="PBMC_2X_protein.csv",
-#      antibody_spreadsheet_csv_file_path="PBMC_2X_spreadsheet.csv",
-#      model="gaussian",
-#      antibody_matching_option=1,
-#      imputation_factor=0.5,
-#      num_chunks=1)
