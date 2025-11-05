@@ -1,0 +1,29 @@
+# YML used to upload files onto Galaxy ToolShed - requires Planemo to be installed
+# Must be called from the directory above the one containing all the tools (e.g. "/immunopheno", since the tools are stored in "/immunopheno/galaxy")
+
+# The name of the repository on the Galaxy ToolShed
+name: immunopheno
+
+# ToolShed username
+owner: lincolnwu
+
+description: "A suite of tools for antibody panel design, normalization, and annotation using the ImmunoPheno package."
+
+long_description: |
+  This suite contains four tools for analyzing CITE-seq and other proteomic data by leveraging the ImmunoPheno database and Python package.
+  1. ImmunoPheno Database Query: A tool to find antibodies, cell types, and experiments.
+  2. ImmunoPheno Normalization: A tool for normalizing CITE-seq data and generating UMAPs.
+  3. ImmunoPheno Annotation: A tool that performs cell type annotation on proteomic data.
+  4. ImmunoPheno Panel Design: A tool to design optimal antibody panels for isolating specific cell populations.
+
+categories:
+  - "Proteomics"
+  - "Single Cell"
+
+remote_repository_url: https://github.com/CamaraLab/ImmunoPheno
+
+tools:
+  - galaxy/which_query.xml
+  - galaxy/normalization.xml
+  - galaxy/annotation.xml
+  - galaxy/panel.xml
