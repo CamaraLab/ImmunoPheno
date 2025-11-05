@@ -2,8 +2,8 @@ Galaxy Platform: Automated Annotation of Cell Identities in mIHC Data
 =====================================================================
 
 ImmunoPheno's automated annotation pipeline is also available through the `Galaxy Platform <https://usegalaxy.org/>`_.
-In this tutorial, we demonstrate how to use the ImmunoPheno Annotation tool published on Galaxy 
-to annotate cell identities in a multiplexed mIHC dataset using reference data
+In this tutorial, we demonstrate how to use the `ImmunoPheno Annotation tool <https://toolshed.g2.bx.psu.edu/view/lincolnwu/immunopheno/0cf5de252348>`_
+published on Galaxy to annotate cell identities in a multiplexed mIHC dataset using reference data
 stored in the ImmunoPhenoDB database. We consider a human tonsil tissue section that has been profiled
 with PhenoCycler using a panel of 26 antibodies.
 

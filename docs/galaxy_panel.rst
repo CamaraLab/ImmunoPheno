@@ -2,8 +2,9 @@ Galaxy Platform: Design of Antibody Panels
 ==========================================
 
 ImmunoPheno's optimal antibody panel pipeline is also available through the `Galaxy Platform <https://usegalaxy.org/>`_.
-In this tutorial, we demonstrate how to use the ImmunoPheno Database Query and ImmunoPheno Panel Design tool published on Galaxy 
-to design optimal antibody panels and gating strategies to isolate populations of interest.
+In this tutorial, we demonstrate how to use the `ImmunoPheno Database Query <https://toolshed.g2.bx.psu.edu/view/lincolnwu/immunopheno/0cf5de252348>`_ 
+and `ImmunoPheno Panel Design <https://toolshed.g2.bx.psu.edu/view/lincolnwu/immunopheno/0cf5de252348>`_ tool 
+published on Galaxy to design optimal antibody panels and gating strategies to isolate populations of interest.
 
 In the first example, we will create a three-antibody panel to isolate mucosal-associated invariant T (MAIT) cells. To begin, 
 we will use the ImmunoPheno Database Query tool to identify the cell ontology ID for MAIT cells. Select "Cell Types" as 
@@ -23,7 +24,7 @@ a tunable hyperparmeter to handle missing data from the reference dataset retrie
 .. image:: images/panel_1a.png
 
 The tool retrieves the optimal set of three antibodies, the corresponding gating strategies, and the decision tree associated with each gate.
-The "importance" column quantifies how informative each antiobdy is. For each surface marker, ImmunoPheno may return multiple antibody IDs, since it does not 
+The "importance" column quantifies how informative each antibody is. For each surface marker, ImmunoPheno may return multiple antibody IDs, since it does not 
 distinguish between antibodies from different vendors corresponding to the same antibody clone.
 
 .. image:: images/panel_1b.png

@@ -2,8 +2,8 @@ Galaxy Platform: Normalizing CITE-Seq Data
 ==========================================
 
 ImmunoPheno's normalization pipeline is also available through the `Galaxy Platform <https://usegalaxy.org/>`_.
-In this tutorial, we demonstrate how to use the ImmunoPheno Normalization tool published on Galaxy 
-to normalize protein data from two different CITE-seq datasets. The first dataset, provided
+In this tutorial, we demonstrate how to use the `ImmunoPheno Normalization <https://toolshed.g2.bx.psu.edu/view/lincolnwu/immunopheno/0cf5de252348>`_ 
+tool published on Galaxy to normalize protein data from two different CITE-seq datasets. The first dataset, provided
 as **CSV** files, contains human PBMCs including 114 antibodies. The second dataset, provided as an
 AnnData **h5ad** file, contains human tonsil cells including 38 antibodies. Cells that do not pass
 the quality controls have been already filtered out and the remaining cells have been annotaetd
