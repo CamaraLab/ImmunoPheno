@@ -28,7 +28,7 @@ jupyter notebook
 We provide a Docker image that contains ImmunoPheno and its dependencies. Running the following command will launch 
 a Jupyter notebook server on localhost with ImmunoPheno and its dependencies installed:
 ```commandline
-docker run -it -p 8888:8888 -p 8050:8050 -v C:\Users\myusername\Documents\myfolder:/home/jovyan/work camaralab/python3:immunopheno
+docker run -it -p 8888:8888 -v C:\Users\myusername\Documents\myfolder:/home/jovyan/work camaralab/python3:immunopheno
 ```
 The ```-p``` flag controls the port number on local host. For example, writing ```-p 4264:8888``` will let you access 
 the Jupyter server from 127.0.0.1:4264. The ```-v``` "bind mount" flag allows one to mount a local directory on the 
@@ -38,5 +38,10 @@ the Docker image. Here one must mount the folder on the host machine as /home/jo
 See the [Jupyter docker image documentation](https://jupyter-docker-stacks.readthedocs.io/en/latest/using/selecting.html) 
 for more information.
 
+## Galaxy
+ImmunoPheno is also accessible through the [Galaxy Platform](https://galaxyproject.org/). Galaxy tools
+for normalization, annotation, and antibody panel design 
+can be found in the [ImmunoPheno Galaxy Repository](https://toolshed.g2.bx.psu.edu/view/lincolnwu/immunopheno/0cf5de252348).
+
 ## Documentation
-Documentation and tutorials can be found on [ImmunoPheno's readthedocs.io website](https://immunopheno.readthedocs.io/en/latest/index.html).
+Documentation and tutorials can be found on [ImmunoPheno's readthedocs.io website](https://immunopheno.readthedocs.io/).
