@@ -7,7 +7,11 @@ ImmunoPheno is a Python library for the design, annotation, and analysis of mult
 existing single-cell CITE-seq datasets. It implements functionalities for finding antibodies for gating specific 
 cell populations, designing optimal antibody panels for multiplexed cytometry experiments, normalizing cytometry 
 (CODEX, spectral flow cytometry, CyTOF, Imaging Mass Cytometry, mIHC, etc.) and CITE-seq data, and identifying and 
-annotating cell populations in these data.
+annotating cell populations in these data. Detailed information about the methods implemented in CAJAL can be found in:
+
+- L. Wu, M. A. Nguyen, Z. Yang, S. Sivagnanam, N. Kirchberger, A. Joshi, K. J. Ahn, J. S. Tumulty, E. Cruz Cabrera, N. Romberg, K. Tan, L. M. Coussens,
+P. G. Camara. _ImmunoPheno: a computational framework for data-driven design and analysis of immunophenotyping experiments._
+bioRxiv (2026). [DOI: 10.64898/2026.02.01.703134.](https://doi.org/10.64898/2026.02.01.703134)
 
 ## Installation
 Until we upload the package to PyPI, the pip installation works from GitHub:
@@ -43,6 +47,12 @@ for more information.
 ImmunoPheno is also accessible through the [Galaxy Platform](https://galaxyproject.org/). Galaxy tools
 for normalization, annotation, and antibody panel design 
 can be found in the [ImmunoPheno Galaxy Repository](https://toolshed.g2.bx.psu.edu/view/lincolnwu/immunopheno/0cf5de252348).
+
+## ImmunoPheno server
+We maintain a central server and web interface ([www.immunopheno.org](https://www.immunopheno.org) containing the Human Immune Cell Antibody Reference (HICAR), including harmonized protein expression 
+profiles for 115,979 cells across 6 human tissues, spanning 93 immune cell types annotated based on gene expression profiles, and covering 390 distinct 
+monoclonal antibodies targeting 294 proteins. Code and documentation for deploying independent servers can be found 
+at the [ImmunoPhenoDB repository](https://github.com/CamaraLab/ImmunoPhenoDB).
 
 ## Documentation
 Documentation and tutorials can be found on [ImmunoPheno's readthedocs.io website](https://immunopheno.readthedocs.io/).
