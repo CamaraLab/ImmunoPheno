@@ -1,6 +1,7 @@
 # ImmunoPheno
 [![tests](https://github.com/CamaraLab/ImmunoPheno/actions/workflows/python-package.yml/badge.svg?branch=main)](https://github.com/CamaraLab/ImmunoPheno/actions/workflows/python-package.yml)
 [![codecov](https://codecov.io/gh/CamaraLab/ImmunoPheno/branch/package-dev/graph/badge.svg?token=R7GBNL9ST6)](https://codecov.io/gh/CamaraLab/ImmunoPheno)
+![GitHub release (latest by date including pre-releases)](https://img.shields.io/github/v/release/CamaraLab/ImmunoPheno?include_prereleases&color=green)
 
 ImmunoPheno is a Python library for the design, annotation, and analysis of multiplexed cytometry data based on 
 existing single-cell CITE-seq datasets. It implements functionalities for finding antibodies for gating specific 
